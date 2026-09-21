@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: solum
+      POSTGRES_PASSWORD: solum_dev
+      POSTGRES_DB: solum
+    ports:
+      - "5432:5432"
+    volumes:
+      - solum_pgdata:/var/lib/postgresql
+volumes:
+  solum_pgdata:
