@@ -1,1 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Manrope:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --font-sans: 'Manrope', sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+body { min-width: 320px; }
