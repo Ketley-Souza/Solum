@@ -11,3 +11,284 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// =============================================================
+// ENUMS
+// =============================================================
+
+/// RN10 — perfis de acesso
+enum PerfilUsuario {
+  PRODUTOR
+  COMPRADOR
+  TRANSPORTADOR
+  ADMINISTRADOR
+
+  @@map("perfil_usuario")
+}
+
+/// RN09 — suspensão é moderação exclusiva do ADMINISTRADOR
+enum StatusUsuario {
+  ATIVO
+  SUSPENSO
+
+  @@map("status_usuario")
+}
+
+enum TipoVeiculo {
+  VUC
+  TOCO
+  TRUCK
+  CARRETA
+  BITREM
+  RODOTREM
+
+  @@map("tipo_veiculo")
+}
+
+enum StatusOferta {
+  ATIVA
+  PAUSADA
+  ENCERRADA
+
+  @@map("status_oferta")
+}
+
+enum StatusProposta {
+  PENDENTE
+  ACEITA
+  RECUSADA
+  CONTRAPROPOSTA
+
+  @@map("status_proposta")
+}
+
+enum StatusContraProposta {
+  PENDENTE
+  ACEITA
+  RECUSADA
+  EXPIRADA
+
+  @@map("status_contra_proposta")
+}
+
+/// RN08 — evolução sequencial estrita (validada na camada de serviço)
+enum StatusPedido {
+  ABERTO
+  NEGOCIANDO
+  FECHADO
+  EM_TRANSPORTE
+  ENTREGUE
+
+  @@map("status_pedido")
+}
+
+enum StatusFrete {
+  DISPONIVEL
+  ACEITO
+  RECUSADO
+  EM_ROTA
+  ENTREGUE
+
+  @@map("status_frete")
+}
+
+enum TipoReferencia {
+  OFERTA
+  PROPOSTA
+  CONTRA_PROPOSTA
+  PEDIDO
+  FRETE
+
+  @@map("tipo_referencia")
+}
+
+// =============================================================
+// MODELOS
+// =============================================================
+
+model Usuario {
+  id            String        @id @default(uuid()) @db.Uuid
+  nome          String        @db.VarChar(150)
+  /// CPF ou CNPJ (somente dígitos) — RNF07: nunca expor publicamente
+  documento     String        @unique @db.VarChar(14)
+  whatsapp      String        @db.VarChar(20)
+  email         String        @unique @db.VarChar(254)
+  /// RNF01 — somente hash (argon2)
+  senha_hash    String
+  perfil        PerfilUsuario
+  status        StatusUsuario @default(ATIVO)
+  criado_em     DateTime      @default(now()) @db.Timestamptz(3)
+  atualizado_em DateTime      @updatedAt @db.Timestamptz(3)
+  excluido_em   DateTime?     @db.Timestamptz(3)
+
+  veiculos       Veiculo[]
+  ofertas        Oferta[]
+  propostas      Proposta[]
+  pedidos_compra Pedido[]
+  fretes         Frete[]
+  notificacoes   Notificacao[]
+
+  @@map("usuarios")
+}
+
+model Veiculo {
+  id                   String      @id @default(uuid()) @db.Uuid
+  transportador_id     String      @db.Uuid
+  tipo_veiculo         TipoVeiculo
+  capacidade_toneladas Decimal     @db.Decimal(10, 3)
+  criado_em            DateTime    @default(now()) @db.Timestamptz(3)
+  atualizado_em        DateTime    @updatedAt @db.Timestamptz(3)
+  excluido_em          DateTime?   @db.Timestamptz(3)
+
+  transportador Usuario @relation(fields: [transportador_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  fretes        Frete[]
+
+  /// Alvo da FK composta em Frete: garante que o veículo pertence ao transportador do frete
+  @@unique([id, transportador_id])
+  @@index([transportador_id])
+  @@map("veiculos")
+}
+
+model Oferta {
+  id            String       @id @default(uuid()) @db.Uuid
+  produtor_id   String       @db.Uuid
+  produto       String       @db.VarChar(120)
+  categoria     String       @db.VarChar(80)
+  qualidade     String       @db.VarChar(80)
+  safra         String       @db.VarChar(20)
+  quantidade    Decimal      @db.Decimal(14, 3)
+  unidade       String       @db.VarChar(20)
+  preco         Decimal      @db.Decimal(14, 2)
+  localizacao   String       @db.VarChar(200)
+  periodo       String       @db.VarChar(80)
+  descricao     String?
+  imagem_url    String?
+  status        StatusOferta @default(ATIVA)
+  criado_em     DateTime     @default(now()) @db.Timestamptz(3)
+  atualizado_em DateTime     @updatedAt @db.Timestamptz(3)
+  excluido_em   DateTime?    @db.Timestamptz(3)
+
+  produtor  Usuario    @relation(fields: [produtor_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  propostas Proposta[]
+  pedidos   Pedido[]
+
+  @@index([produtor_id])
+  @@index([status])
+  @@map("ofertas")
+}
+
+model Proposta {
+  id            String         @id @default(uuid()) @db.Uuid
+  oferta_id     String         @db.Uuid
+  comprador_id  String         @db.Uuid
+  quantidade    Decimal        @db.Decimal(14, 3)
+  preco         Decimal        @db.Decimal(14, 2)
+  status        StatusProposta @default(PENDENTE)
+  criado_em     DateTime       @default(now()) @db.Timestamptz(3)
+  atualizado_em DateTime       @updatedAt @db.Timestamptz(3)
+  excluido_em   DateTime?      @db.Timestamptz(3)
+
+  oferta          Oferta           @relation(fields: [oferta_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  comprador       Usuario          @relation(fields: [comprador_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  contrapropostas ContraProposta[]
+  pedido          Pedido?
+
+  @@index([oferta_id])
+  @@index([comprador_id])
+  @@index([status])
+  @@map("propostas")
+}
+
+model ContraProposta {
+  id                        String               @id @default(uuid()) @db.Uuid
+  proposta_id               String               @db.Uuid
+  preco_contraproposta      Decimal              @db.Decimal(14, 2)
+  quantidade_contraproposta Decimal              @db.Decimal(14, 3)
+  mensagem                  String?
+  status                    StatusContraProposta @default(PENDENTE)
+  /// Expiração de 24h garantida no próprio banco
+  expira_em                 DateTime             @default(dbgenerated("(now() + '24:00:00'::interval)")) @db.Timestamptz(3)
+  criado_em                 DateTime             @default(now()) @db.Timestamptz(3)
+  atualizado_em             DateTime             @updatedAt @db.Timestamptz(3)
+  excluido_em               DateTime?            @db.Timestamptz(3)
+
+  proposta Proposta @relation(fields: [proposta_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([proposta_id])
+  @@index([status, expira_em])
+  @@map("contrapropostas")
+}
+
+/// Cenário A (negociação): oferta_id + proposta_id
+/// Cenário B (compra direta): oferta_id, proposta_id nulo
+model Pedido {
+  id               String       @id @default(uuid()) @db.Uuid
+  codigo           String       @unique @db.VarChar(30)
+  oferta_id        String       @db.Uuid
+  proposta_id      String?      @unique @db.Uuid
+  comprador_id     String       @db.Uuid
+  preco_final      Decimal      @db.Decimal(14, 2)
+  quantidade_final Decimal      @db.Decimal(14, 3)
+  endereco_entrega String       @db.VarChar(300)
+  status           StatusPedido @default(ABERTO)
+  criado_em        DateTime     @default(now()) @db.Timestamptz(3)
+  atualizado_em    DateTime     @updatedAt @db.Timestamptz(3)
+  excluido_em      DateTime?    @db.Timestamptz(3)
+
+  oferta    Oferta    @relation(fields: [oferta_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  proposta  Proposta? @relation(fields: [proposta_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  comprador Usuario   @relation(fields: [comprador_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  frete     Frete?
+
+  @@index([oferta_id])
+  @@index([comprador_id])
+  @@index([status])
+  @@map("pedidos")
+}
+
+/// RN06 — criado na mesma transação que leva o Pedido a FECHADO
+/// RN07 — aceite somente se status = DISPONIVEL e transportador_id nulo
+/// No aceite, veiculo_id é herdado da frota do transportador (FK composta)
+model Frete {
+  id               String      @id @default(uuid()) @db.Uuid
+  codigo           String      @unique @db.VarChar(30)
+  pedido_id        String      @unique @db.Uuid
+  transportador_id String?     @db.Uuid
+  veiculo_id       String?     @db.Uuid
+  endereco_origem  String      @db.VarChar(300)
+  endereco_destino String      @db.VarChar(300)
+  peso_toneladas   Decimal     @db.Decimal(10, 3)
+  /// Nulo até ser definido (origem do valor ainda não especificada)
+  valor_frete      Decimal?    @db.Decimal(14, 2)
+  status           StatusFrete @default(DISPONIVEL)
+  criado_em        DateTime    @default(now()) @db.Timestamptz(3)
+  atualizado_em    DateTime    @updatedAt @db.Timestamptz(3)
+  excluido_em      DateTime?   @db.Timestamptz(3)
+
+  pedido        Pedido   @relation(fields: [pedido_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  transportador Usuario? @relation(fields: [transportador_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  veiculo       Veiculo? @relation(fields: [veiculo_id, transportador_id], references: [id, transportador_id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([transportador_id])
+  @@index([veiculo_id])
+  @@index([status])
+  @@map("fretes")
+}
+
+model Notificacao {
+  id              String          @id @default(uuid()) @db.Uuid
+  usuario_id      String          @db.Uuid
+  titulo          String          @db.VarChar(150)
+  mensagem        String
+  lida            Boolean         @default(false)
+  tipo_referencia TipoReferencia?
+  referencia_id   String?         @db.Uuid
+  criado_em       DateTime        @default(now()) @db.Timestamptz(3)
+  atualizado_em   DateTime        @updatedAt @db.Timestamptz(3)
+  excluido_em     DateTime?       @db.Timestamptz(3)
+
+  usuario Usuario @relation(fields: [usuario_id], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([usuario_id, lida])
+  @@map("notificacoes")
+}
