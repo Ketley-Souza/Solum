@@ -1,5 +1,6 @@
 import logoImage from '../assets/logo.svg'
 import { ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 export default function HomeNavbar() {
   const links = [['Início', '#inicio'], ['Marketplace', '#ofertas'], ['Como Funciona', '#como-funciona'], ['Sobre', '#sobre']]
@@ -13,7 +14,7 @@ export default function HomeNavbar() {
       <nav className="order-3 flex w-full gap-1 overflow-x-auto rounded-full bg-[#fafaf8] p-1 md:order-0 md:w-auto" aria-label="Navegação principal">
         {links.map(([label, href], index) => <a className={`cursor-pointer whitespace-nowrap rounded-full px-3 py-2.5 text-[13px] font-bold transition-[background-color,color,box-shadow] duration-300 ease-out hover:bg-white hover:text-[#141f16] hover:shadow-[0_2px_4px_rgba(0,0,0,.04)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c] ${index === 0 ? 'bg-white text-[#141f16] shadow-[0_2px_4px_rgba(0,0,0,.04)]' : 'text-[#5e6b60]'}`} href={href} key={label}>{label}</a>)}
       </nav>
-      <a href="/login" className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[#15371e] px-5 py-3 text-[13px] font-bold text-[#15371e] transition-[background-color,color,border-color,transform] duration-300 ease-out hover:border-[#fff] hover:bg-[#eef5e8] hover:text-[#194e16] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]">Entrar <ArrowRight size={15} strokeWidth={2.25} aria-hidden="true" /></a>
+      <Link to="/login" className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[#15371e] px-5 py-3 text-[13px] font-bold text-[#15371e] transition-[background-color,color,border-color,transform] duration-300 ease-out hover:border-[#fff] hover:bg-[#eef5e8] hover:text-[#194e16] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]">Entrar <ArrowRight size={15} strokeWidth={2.25} aria-hidden="true" /></Link>
     </header>
   )
 }
