@@ -2,6 +2,8 @@ import { BrowserRouter, Link, Route, Routes, useNavigate } from "react-router-do
 import HomePage from "../pages/home/HomePage";
 import AuthPage from "../pages/AuthPage";
 import BuyerPage from "../pages/buyer";
+import ProducerOrdersPage from "../pages/producer/orders";
+import ProducerNegotiationPage from "../pages/producer/negotiation";
 import ProducerPage from "../pages/producer";
 import CarrierPage from "../pages/carrier";
 import { authService } from "../services/authService";
@@ -62,11 +64,31 @@ export function AppRoutes() {
           }
         />
         <Route
+          path="/produtor/negociacao/:offerId"
+          element={
+            <ProtectedRoute>
+              <ProfileRoute requiredProfile="produtor">
+                <ProducerNegotiationPage />
+              </ProfileRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/comprador"
           element={
             <ProtectedRoute>
               <ProfileRoute requiredProfile="comprador">
                 <BuyerPage />
+              </ProfileRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/produtor/pedidos"
+          element={
+            <ProtectedRoute>
+              <ProfileRoute requiredProfile="produtor">
+                <ProducerOrdersPage />
               </ProfileRoute>
             </ProtectedRoute>
           }
