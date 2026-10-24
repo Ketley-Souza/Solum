@@ -49,7 +49,7 @@ export default function MyFreightsPage() {
     <div className="min-h-screen bg-[#fafaf8] font-['Manrope'] text-[#0b150c]">
 
       <ProfileNavbar
-        profileName="Carlos Silva"
+        profileName="Marcos"
         role="TRANSPORTADOR"
         links={links}
       />
