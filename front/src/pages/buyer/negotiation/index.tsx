@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { BadgeCheck, Bell, CalendarDays, CheckCircle2, ChevronDown, CircleDollarSign, MapPin, Package, Send, ShieldCheck, Star, Wheat } from 'lucide-react'
-import logo from '../../../assets/logo.svg'
+import { BadgeCheck, CalendarDays, CheckCircle2, CircleDollarSign, MapPin, Package, Send, ShieldCheck, Star, Wheat } from 'lucide-react'
+import ProfileNavbar from '../../../components/ProfileNavbar'
 import soja from '../../../assets/offer-soja.jpg'
 import cafe from '../../../assets/offer-cafe.png'
 import milho from '../../../assets/offer-milho.jpg'
@@ -17,7 +17,7 @@ const products: Product[] = [
 const money = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n)
 function parsePrice(value: string) { const n = Number(value.replace(/[^\d,]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0 }
 
-export default function ProducerNegotiationPage() {
+export default function BuyerNegotiationPage() {
   const { offerId } = useParams<{ offerId: string }>()
   const product = products.find(p => p.id === offerId) ?? products[0]
   const [quantity, setQuantity] = useState('200')
@@ -39,17 +39,21 @@ export default function ProducerNegotiationPage() {
 
   return (
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
-      <header className="border-b border-[#e2e8dc] bg-white">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-4 px-5 py-4 md:px-12">
-          <Link to="/produtor" className="flex items-center gap-2.5"><img src={logo} alt="" className="size-9" /><span><strong className="block text-lg font-extrabold leading-none text-[#194e16]">SOLUM</strong><small className="text-[9px] font-bold text-[#708077]">AGRONEGÓCIO B2B</small></span></Link>
-          <nav className="flex items-center gap-1 rounded-full bg-[#f4f6ef] p-1 text-xs font-semibold" aria-label="Navegação"><Link to="/produtor" className="rounded-full bg-white px-4 py-2.5 font-bold text-[#173b21] shadow-sm">Marketplace</Link><Link to="/produtor/pedidos" className="rounded-full px-4 py-2.5 text-[#708077] hover:bg-white">Meus pedidos</Link><span className="hidden items-center gap-1 px-3 text-[#708077] sm:inline-flex"><Bell size={14} /> Notificações <span className="rounded-full bg-[#c1f23c] px-1.5 text-[#102217]">3</span></span></nav>
-          <div className="flex items-center gap-2 rounded-full bg-[#f0f4eb] py-1 pl-1 pr-3"><span className="grid size-8 place-items-center rounded-full bg-[#173b21] text-xs font-bold text-white">JR</span><span><strong className="block text-xs font-bold">João Ribeiro</strong><small className="block text-[9px] font-bold text-[#287a48]">PRODUTOR</small></span><ChevronDown size={13} /></div>
-        </div>
-      </header>
+      <ProfileNavbar
+        profileName="João Ribeiro"
+        role="COMPRADOR"
+        notificationCount={3}
+        notificationsHref="/comprador/notificacoes"
+        links={[
+          { label: 'Marketplace', href: '/comprador' },
+          { label: 'Meus pedidos', href: '/comprador/pedidos' },
+          { label: 'Negociações', href: '/comprador/negociacao/1' },
+        ]}
+      />
 
       <main className="mx-auto max-w-[1440px] px-5 pb-16 pt-9 md:px-12">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-xs font-semibold text-[#708077]"><Link className="hover:underline" to="/produtor">Marketplace</Link> <span className="mx-2">›</span> Oferta #{product.id === '1' ? 'SLM-2841' : `SLM-${2840 + Number(product.id)}`}</p><h1 className="mt-2 font-['Bricolage_Grotesque'] text-3xl font-extrabold md:text-4xl">Negocie direto com o produtor</h1><p className="mt-2 text-sm text-[#708077]">Revise o lote, ajuste sua proposta e acompanhe o valor estimado antes de enviar.</p></div>
+          <div><p className="text-xs font-semibold text-[#708077]"><Link className="hover:underline" to="/comprador">Marketplace</Link> <span className="mx-2">›</span> Oferta #{product.id === '1' ? 'SLM-2841' : `SLM-${2840 + Number(product.id)}`}</p><h1 className="mt-2 font-['Bricolage_Grotesque'] text-3xl font-extrabold md:text-4xl">Negocie direto com o produtor</h1><p className="mt-2 text-sm text-[#708077]">Revise o lote, ajuste sua proposta e acompanhe o valor estimado antes de enviar.</p></div>
           <span className="inline-flex items-center gap-2 rounded-full bg-[#e8f5ce] px-4 py-2 text-xs font-bold text-[#287a48]"><span className="size-2 rounded-full bg-[#287a48]" /> Oferta ativa · válida até 15/09/2026</span>
         </div>
 

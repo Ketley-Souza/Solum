@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Bell, Check, CheckCircle2, ChevronDown, Clock3, MapPin, ShoppingBag, TrendingUp, Truck } from 'lucide-react'
-import logo from '../../../assets/logo.svg'
+import { ArrowRight, Check, CheckCircle2, Clock3, MapPin, ShoppingBag, TrendingUp, Truck } from 'lucide-react'
+import ProfileNavbar from '../../../components/ProfileNavbar'
 import soja from '../../../assets/offer-soja.jpg'
 import cafe from '../../../assets/offer-cafe.png'
 import milho from '../../../assets/offer-milho.jpg'
@@ -17,7 +17,7 @@ const orders: Order[] = [
 const filters = ['Todos', 'Em andamento', 'Aguardando ação', 'Concluídos', 'Cancelados'] as const
 type Filter = typeof filters[number]
 
-export default function ProducerOrdersPage() {
+export default function BuyerOrdersPage() {
   const [filter, setFilter] = useState<Filter>('Todos')
   const [selected, setSelected] = useState<Order | null>(null)
   const visibleOrders = useMemo(() => orders.filter((order) => {
@@ -30,28 +30,22 @@ export default function ProducerOrdersPage() {
 
   return (
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
-      <header className="border-b border-[#e2e8dc] bg-white">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-4 px-5 py-4 md:px-12">
-          <Link to="/produtor" className="flex items-center gap-2.5" aria-label="Solum - Marketplace">
-            <img src={logo} alt="" className="size-9" />
-            <span><strong className="block text-lg font-extrabold leading-none text-[#194e16]">SOLUM</strong><small className="text-[9px] font-bold text-[#708077]">AGRONEGÓCIO B2B</small></span>
-          </Link>
-          <nav className="flex items-center gap-1 rounded-full bg-[#f4f6ef] p-1 text-xs font-semibold" aria-label="Navegação do produtor">
-            <Link to="/produtor" className="rounded-full px-4 py-2.5 text-[#708077] hover:bg-white">Marketplace</Link>
-            <Link to="/produtor/pedidos" aria-current="page" className="rounded-full bg-white px-4 py-2.5 font-bold text-[#102217] shadow-sm">Meus pedidos</Link>
-            <span className="hidden px-3 text-[#708077] sm:inline-flex"><Bell size={14} className="mr-1" /> Notificações <span className="ml-1 rounded-full bg-[#c1f23c] px-1.5 text-[#102217]">3</span></span>
-          </nav>
-          <div className="flex items-center gap-2 rounded-full bg-[#f0f4eb] py-1 pl-1 pr-3">
-            <span className="grid size-8 place-items-center rounded-full bg-[#173b21] text-xs font-bold text-white">JR</span>
-            <span className="text-left"><strong className="block text-xs font-bold">João Ribeiro</strong><small className="block text-[9px] font-bold text-[#287a48]">PRODUTOR</small></span><ChevronDown size={13} />
-          </div>
-        </div>
-      </header>
+      <ProfileNavbar
+        profileName="João Ribeiro"
+        role="COMPRADOR"
+        notificationCount={3}
+        notificationsHref="/comprador/notificacoes"
+        links={[
+          { label: 'Marketplace', href: '/comprador' },
+          { label: 'Meus pedidos', href: '/comprador/pedidos' },
+          { label: 'Negociações', href: '/comprador/negociacao/1' },
+        ]}
+      />
 
       <main className="mx-auto max-w-[1440px] px-5 pb-16 pt-9 md:px-12">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div><p className="text-[10px] font-extrabold uppercase tracking-wide text-[#287a48]">Conta produtora · Gestão de pedidos</p><h1 className="mt-1 font-['Bricolage_Grotesque'] text-3xl font-extrabold">Meus pedidos</h1><p className="mt-1 text-xs text-[#708077]">Acompanhe contratos, entregas e documentos de todas as compras feitas pela sua operação.</p></div>
-          <Link to="/produtor" className="inline-flex items-center gap-2 rounded-xl bg-[#c1f23c] px-5 py-3 text-xs font-extrabold hover:bg-[#d5fa73]">Explorar marketplace <ShoppingBag size={14} /></Link>
+          <div><p className="text-[10px] font-extrabold uppercase tracking-wide text-[#287a48]">Conta compradora · Gestão de pedidos</p><h1 className="mt-1 font-['Bricolage_Grotesque'] text-3xl font-extrabold">Meus pedidos</h1><p className="mt-1 text-xs text-[#708077]">Acompanhe contratos, entregas e documentos de todas as compras feitas pela sua operação.</p></div>
+          <Link to="/comprador" className="inline-flex items-center gap-2 rounded-xl bg-[#c1f23c] px-5 py-3 text-xs font-extrabold hover:bg-[#d5fa73]">Explorar marketplace <ShoppingBag size={14} /></Link>
         </div>
 
         <section aria-label="Resumo dos pedidos" className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -101,8 +95,3 @@ export default function ProducerOrdersPage() {
     </div>
   )
 }
-
-//Como a página ficará em producer/orders, os caminhos relativos para componentes e imagens precisam subir três níveis.
-//ou seja: import ProfileNavbar from '../../../components/ProfileNavbar'
-//imagem: import sojaImage from '../../../assets/offer-soja.jpg'
-//rota:http://localhost:5173/produtor/pedidos 

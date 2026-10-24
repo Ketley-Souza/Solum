@@ -17,9 +17,11 @@ type ProfileNavbarProps = {
   profileName: string
   role?: string
   links: ProfileNavLink[]
+  notificationCount?: number
+  notificationsHref?: string
 }
 
-export default function ProfileNavbar({ profileName, role, links }: ProfileNavbarProps) {
+export default function ProfileNavbar({ profileName, role, links, notificationCount = 0, notificationsHref }: ProfileNavbarProps) {
   const navIcons: LucideIcon[] = [LayoutDashboard, Store, Handshake, PackageCheck]
   const location = useLocation()
   const [currentHash, setCurrentHash] = useState(() =>
@@ -80,13 +82,41 @@ export default function ProfileNavbar({ profileName, role, links }: ProfileNavba
             </a>
           )
         })}
+
+        {/* Notificações — mesmo estilo dos links */}
+        {notificationsHref ? (
+          <Link
+            to={notificationsHref}
+            className="relative flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2.5 text-[13px] font-semibold text-[#415247] transition-colors hover:bg-white hover:text-[#194e16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]"
+            aria-label={`Notificações${notificationCount > 0 ? `: ${notificationCount} não lidas` : ''}`}
+          >
+            <span className="relative">
+              <Bell size={15} strokeWidth={2} aria-hidden="true" />
+              {notificationCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex min-w-[16px] items-center justify-center rounded-full bg-[#c1f23c] px-1 text-[9px] font-extrabold leading-4 text-[#102217]">
+                  {notificationCount > 99 ? '99+' : notificationCount}
+                </span>
+              )}
+            </span>
+          </Link>
+        ) : (
+          <button
+            className="relative flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2.5 text-[13px] font-semibold text-[#415247] transition-colors hover:bg-white hover:text-[#194e16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]"
+            aria-label={`Notificações${notificationCount > 0 ? `: ${notificationCount} não lidas` : ''}`}
+          >
+            <span className="relative">
+              <Bell size={15} strokeWidth={2} aria-hidden="true" />
+              {notificationCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex min-w-[16px] items-center justify-center rounded-full bg-[#c1f23c] px-1 text-[9px] font-extrabold leading-4 text-[#102217]">
+                  {notificationCount > 99 ? '99+' : notificationCount}
+                </span>
+              )}
+            </span>
+          </button>
+        )}
       </nav>
 
       <div className="flex items-center gap-3">
-        <button className="relative grid size-10 cursor-pointer place-items-center rounded-full border border-transparent text-[#415247] transition-colors hover:bg-[#f7f8f3] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]" aria-label="Notificações">
-          <Bell size={18} strokeWidth={2} />
-          <span className="absolute right-2 top-2 size-1.5 rounded-full bg-[#c1f23c]" />
-        </button>
         <button className="flex cursor-pointer items-center gap-2 rounded-full bg-[#f0f4eb] py-1 pl-1.5 pr-3 transition-colors hover:bg-[#e3f3e8] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]">
           <span className="grid size-8.5 place-items-center rounded-full bg-[#2f681f] text-sm font-bold text-white">{profileName.charAt(0)}</span>
           <span className="hidden text-left sm:block">
