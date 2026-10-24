@@ -21,7 +21,12 @@ import CarrierHistoryPage from "../pages/carrier/history";
 import { authService } from "../services/authService";
 import { useAuthStore } from "../stores/authStore";
 import { RequireProfile, PROFILE_HOME } from "../components/RequireProfile";
-import type { AuthMode, CadastroPayload, LoginPayload, Profile } from "../types/auth";
+import type {
+  AuthMode,
+  CadastroPayload,
+  LoginPayload,
+  Profile,
+} from "../types/auth";
 
 function AuthRoute({ mode }: { mode: AuthMode }) {
   const navigate = useNavigate();
@@ -39,7 +44,13 @@ function AuthRoute({ mode }: { mode: AuthMode }) {
     navigate(PROFILE_HOME[session.profile], { replace: true });
   };
 
-  return <AuthPage initialMode={mode} onLogin={handleLogin} onCadastro={handleCadastro} />;
+  return (
+    <AuthPage
+      initialMode={mode}
+      onLogin={handleLogin}
+      onCadastro={handleCadastro}
+    />
+  );
 }
 
 /**
@@ -73,9 +84,20 @@ function NotFoundPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-[#fafaf8] px-5 text-center text-[#0b150c]">
       <div>
-        <p className="text-sm font-extrabold uppercase tracking-wide text-[#5e6b60]">Erro 404</p>
-        <h1 className="mt-2 font-['Bricolage_Grotesque'] text-4xl font-extrabold">Página não encontrada</h1>
-        <Link className="mt-6 inline-block font-extrabold text-[#2f681f] underline" to="/">Voltar para a página inicial</Link>
+        <p className="text-sm font-extrabold uppercase tracking-wide text-[#5e6b60]">
+          Erro 404
+        </p>
+
+        <h1 className="mt-2 font-['Bricolage_Grotesque'] text-4xl font-extrabold">
+          Página não encontrada
+        </h1>
+
+        <Link
+          className="mt-6 inline-block font-extrabold text-[#2f681f] underline"
+          to="/"
+        >
+          Voltar para a página inicial
+        </Link>
       </div>
     </main>
   );
@@ -89,12 +111,21 @@ function ErrorPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-[#fafaf8] px-5 text-center text-[#0b150c]">
       <div>
-        <p className="text-sm font-extrabold uppercase tracking-wide text-[#5e6b60]">Algo deu errado</p>
-        <h1 className="mt-2 font-['Bricolage_Grotesque'] text-3xl font-extrabold">Não foi possível carregar esta tela</h1>
+        <p className="text-sm font-extrabold uppercase tracking-wide text-[#5e6b60]">
+          Algo deu errado
+        </p>
+        <h1 className="mt-2 font-['Bricolage_Grotesque'] text-3xl font-extrabold">
+          Não foi possível carregar esta tela
+        </h1>
         <p className="mt-2 text-sm text-[#66736a]">
           {error instanceof Error ? error.message : "Erro inesperado."}
         </p>
-        <Link className="mt-6 inline-block font-extrabold text-[#2f681f] underline" to="/">Voltar para a página inicial</Link>
+        <Link
+          className="mt-6 inline-block font-extrabold text-[#2f681f] underline"
+          to="/"
+        >
+          Voltar para a página inicial
+        </Link>
       </div>
     </main>
   );
@@ -111,20 +142,20 @@ const router = createBrowserRouter([
       { path: "/cadastro", element: <AuthRoute mode="criar" /> },
 
       // Atalho de desenvolvimento (não existe no build de produção)
+      // /dev/entrar/transportador
+      // /dev/entrar/comprador
+      // /dev/entrar/produtor
       ...(import.meta.env.DEV
         ? [{ path: "dev/entrar/:perfil", element: <DevLogin /> }]
         : []),
-
-
-      ///dev/entrar/transportador
-      ///dev/entrar/comprador
-      ///dev/entrar/produtor
 
       // Produtor
       {
         path: "produtor",
         element: <RequireProfile profile="produtor" />,
-        children: [{ index: true, element: <ProducerPage /> }],
+        children: [
+          { index: true, element: <ProducerPage /> },
+        ],
       },
 
       // Comprador
