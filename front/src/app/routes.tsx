@@ -14,6 +14,10 @@ import BuyerOrdersPage from "../pages/buyer/orders";
 import BuyerNegotiationPage from "../pages/buyer/negotiation";
 import BuyerNotificationsPage from "../pages/buyer/notifications";
 import ProducerPage from "../pages/producer";
+import ProducerNegotiationsPage from "../pages/producer/negotiations";
+import ProducerOrdersPage from "../pages/producer/orders";
+import ProducerNotificationsPage from "../pages/producer/notifications";
+import ProducerOffersPage from "../pages/producer/offers";
 import CarrierPage from "../pages/carrier";
 import AvailableFreightsPage from "../pages/carrier/available-freights";
 import MyFreightsPage from "../pages/carrier/my-freights";
@@ -155,6 +159,10 @@ const router = createBrowserRouter([
         element: <RequireProfile profile="produtor" />,
         children: [
           { index: true, element: <ProducerPage /> },
+          { path: "ofertas", element: <ProducerOffersPage /> },
+          { path: "negociacoes", element: <ProducerNegotiationsPage /> },
+          { path: "pedidos", element: <ProducerOrdersPage /> },
+          { path: "notificacoes", element: <ProducerNotificationsPage /> },
         ],
       },
 
