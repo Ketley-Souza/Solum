@@ -1,5 +1,5 @@
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import ProfileNavbar from "../../components/ProfileNavbar";
+import { offerService, type BackendOffer } from "../../services/offerService";
 
 import heroImage from "../../assets/hero.jpg";
 import sojaImage from "../../assets/offer-soja.jpg";
@@ -31,7 +32,7 @@ type Category =
 type CategoryFilter = Category | "Todas as categorias";
 
 type Offer = {
-  id: number;
+  id: number | string;
   category: Category;
   title: string;
   detail: string;
@@ -111,7 +112,32 @@ const offers: Offer[] = [
   },
 ];
 
+/** Converte uma oferta do banco para o card do marketplace. */
+function fromBackend(offer: BackendOffer): Offer {
+  const unitName = offer.unidade.toLowerCase();
+  return {
+    id: offer.id,
+    category: offer.categoria === "Café" ? "Café" : "Grãos",
+    title: offer.produto,
+    detail: `${offer.qualidade} · ${Number(offer.quantidade)} ${offer.unidade}`,
+    price: Number(offer.preco).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+    unit: unitName.startsWith("saca") ? "saca" : unitName.startsWith("ton") ? "tonelada" : "kg",
+    city: offer.localizacao,
+    seller: offer.produtor?.nome ?? "Produtor",
+    image:
+      offer.imagem_url ||
+      (offer.categoria === "Café" ? cafeImage : offer.categoria === "Milho" ? milhoImage : offer.categoria === "Soja" ? sojaImage : algodaoImage),
+    tag: `SAFRA ${offer.safra}`,
+    state: offer.localizacao.match(/([A-Z]{2})\s*$/)?.[1] ?? "",
+  };
+}
+
 export default function BuyerPage() {
+  const [remoteOffers, setRemoteOffers] = useState<Offer[]>([]);
+  useEffect(() => {
+    offerService.listActive().then((list) => setRemoteOffers(list.map(fromBackend))).catch(() => setRemoteOffers([]));
+  }, []);
+
   const [category, setCategory] =
     useState<CategoryFilter>("Todas as categorias");
 
@@ -121,7 +147,7 @@ export default function BuyerPage() {
   const [delivery, setDelivery] = useState("Até 30 dias");
 
   const filteredOffers = useMemo(() => {
-    return offers.filter((offer) => {
+    return [...remoteOffers, ...offers].filter((offer) => {
       const matchesCategory =
         category === "Todas as categorias" ||
         offer.category === category;
@@ -149,7 +175,7 @@ export default function BuyerPage() {
         matchesSearch
       );
     });
-  }, [category, state, appliedSearch]);
+  }, [category, state, appliedSearch, remoteOffers]);
 
   function clearFilters() {
     setCategory("Todas as categorias");

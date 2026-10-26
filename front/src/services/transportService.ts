@@ -193,9 +193,21 @@ async function getById(
   };
 }
 
+/** Cadastra um veículo na frota do transportador logado (grava no banco). */
+async function createVehicle(
+  tipo_veiculo: string,
+  capacidade_toneladas: number,
+): Promise<Vehicle> {
+  return authenticatedRequest<Vehicle>("/veiculos", {
+    method: "POST",
+    body: JSON.stringify({ tipo_veiculo, capacidade_toneladas }),
+  });
+}
+
 export const transportService = {
   listFreights,
   listVehicles,
+  createVehicle,
   acceptFreight,
   startTransport,
   confirmDelivery,

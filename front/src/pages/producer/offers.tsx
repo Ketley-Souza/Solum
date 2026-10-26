@@ -1,5 +1,5 @@
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MoreHorizontal,
   Plus,
@@ -13,6 +13,7 @@ import CreateOfferModal, {
   type NewOffer,
 } from "./CreateOfferModal";
 import EditOfferModal from "./EditOfferModal";
+import { offerService, type BackendOffer, type OfferStatus } from "../../services/offerService";
 
 import cafeImage from "../../assets/offer-cafe.png";
 import milhoImage from "../../assets/offer-milho.jpg";
@@ -27,9 +28,23 @@ type Status =
 
 type Offer = NewOffer & {
   id: number;
+  /** Presente quando a oferta está gravada no banco de dados. */
+  remoteId?: string;
   proposals: string;
   status: Status;
   image: string;
+};
+
+const STATUS_FROM_BACK: Record<OfferStatus, Status> = {
+  ATIVA: "Ativa",
+  PAUSADA: "Pausada",
+  ENCERRADA: "Encerrada",
+};
+
+const STATUS_TO_BACK: Partial<Record<Status, OfferStatus>> = {
+  Ativa: "ATIVA",
+  Pausada: "PAUSADA",
+  Encerrada: "ENCERRADA",
 };
 
 const initialOffers: Offer[] = [
@@ -189,8 +204,42 @@ function getBadge(status: Status) {
   }
 }
 
+function fromBackend(offer: BackendOffer, index: number): Offer {
+  const [availableFrom = "", availableUntil = ""] = offer.periodo.split(" a ");
+  return {
+    id: 1000 + index,
+    remoteId: offer.id,
+    product: offer.produto,
+    category: offer.categoria,
+    classification: offer.qualidade,
+    harvest: offer.safra,
+    quantity: Number(offer.quantidade),
+    unit: offer.unidade,
+    price: Number(offer.preco),
+    location: offer.localizacao,
+    availableFrom,
+    availableUntil,
+    description: offer.descricao ?? "",
+    observations: "",
+    proposals: "Nenhuma",
+    status: STATUS_FROM_BACK[offer.status],
+    image: offer.imagem_url || getImage(offer.categoria),
+  };
+}
+
 export default function ProducerOffersPage() {
   const [offers, setOffers] = useState<Offer[]>(initialOffers);
+  const [apiError, setApiError] = useState("");
+
+  // Ofertas reais do produtor logado vêm do banco; as de exemplo continuam abaixo delas.
+  useEffect(() => {
+    offerService
+      .listMine()
+      .then((mine) =>
+        setOffers([...mine.map(fromBackend), ...initialOffers]),
+      )
+      .catch(() => setOffers(initialOffers));
+  }, []);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("Todas");
   const [menuId, setMenuId] = useState<number | null>(null);
@@ -255,21 +304,40 @@ export default function ProducerOffersPage() {
         offer.status !== "Encerrada"
     ) ?? null;
 
-  // Criar oferta
-  function createOffer(data: NewOffer) {
-    const newOffer: Offer = {
-      ...data,
-      id: Math.max(0, ...offers.map((offer) => offer.id)) + 1,
-      proposals: "Nenhuma",
-      status: "Ativa",
-      image: getImage(data.category),
-    };
+  // Criar oferta (gravada no banco)
+  async function createOffer(data: NewOffer) {
+    try {
+      const saved = await offerService.create({
+        produto: data.product,
+        categoria: data.category,
+        qualidade: data.classification,
+        safra: data.harvest,
+        quantidade: data.quantity,
+        unidade: data.unit === "Sacas de 60 kg" || data.unit === "Toneladas" ? data.unit : "kg",
+        preco: data.price,
+        localizacao: data.location,
+        periodo: data.availableFrom && data.availableUntil ? `${data.availableFrom} a ${data.availableUntil}` : "A combinar",
+        descricao: [data.description, data.observations].filter(Boolean).join("\n") || undefined,
+      });
+      const newOffer: Offer = {
+        ...data,
+        id: Math.max(0, ...offers.map((offer) => offer.id)) + 1,
+        remoteId: saved.id,
+        proposals: "Nenhuma",
+        status: "Ativa",
+        image: getImage(data.category),
+      };
 
-    setOffers((current) => [newOffer, ...current]);
-    setTab("Todas");
-    setSearch("");
-    setOnlyWithProposals(false);
-    setShowCreateModal(false);
+      setOffers((current) => [newOffer, ...current]);
+      setApiError("");
+      setTab("Todas");
+      setSearch("");
+      setOnlyWithProposals(false);
+      setShowCreateModal(false);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Não foi possível salvar a oferta.");
+      setShowCreateModal(false);
+    }
   }
 
   // Editar oferta
@@ -294,7 +362,19 @@ export default function ProducerOffersPage() {
   }
 
   // Pausar, reativar e encerrar
-  function changeStatus(id: number, status: Status) {
+  async function changeStatus(id: number, status: Status) {
+    const target = offers.find((offer) => offer.id === id);
+    const backStatus = STATUS_TO_BACK[status];
+    if (target?.remoteId && backStatus) {
+      try {
+        await offerService.changeStatus(target.remoteId, backStatus);
+        setApiError("");
+      } catch (error) {
+        setApiError(error instanceof Error ? error.message : "Não foi possível atualizar a oferta.");
+        setMenuId(null);
+        return;
+      }
+    }
     setOffers((current) =>
       current.map((offer) =>
         offer.id === id && offer.status !== "Encerrada"
@@ -316,6 +396,10 @@ export default function ProducerOffersPage() {
       />
 
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
+        {apiError && (
+          <p className="mb-5 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{apiError}</p>
+        )}
+
         {/* Cabeçalho */}
         <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
           <div>

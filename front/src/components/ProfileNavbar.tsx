@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
+import { useAuthStore } from '../stores/authStore'
 
 type ProfileNavLink = { label: string; href: string }
 
@@ -21,7 +22,9 @@ type ProfileNavbarProps = {
   notificationsHref?: string
 }
 
-export default function ProfileNavbar({ profileName, role, links, notificationCount = 0, notificationsHref }: ProfileNavbarProps) {
+export default function ProfileNavbar({ profileName: fallbackName, role, links, notificationCount = 0, notificationsHref }: ProfileNavbarProps) {
+  // Nome real do usuário logado; a prop só serve de fallback.
+  const profileName = useAuthStore((state) => state.user?.name) ?? fallbackName
   const navIcons: LucideIcon[] = [LayoutDashboard, Store, Handshake, PackageCheck]
   const location = useLocation()
   const [currentHash, setCurrentHash] = useState(() =>

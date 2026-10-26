@@ -47,6 +47,9 @@ const FATOR_TONELADAS: Record<string, string> = {
   tonelada: '1',
   toneladas: '1',
   kg: '0.001',
+  'sacas de 60 kg': '0.06',
+  saca: '0.06',
+  sacas: '0.06',
 }
 
 export function converterParaToneladas(quantidade: Prisma.Decimal, unidade: string): Prisma.Decimal {
@@ -136,7 +139,8 @@ export async function listarPedidos(ator: UsuarioAutenticado) {
   return prisma.pedido.findMany({
     where,
     include: {
-      oferta: true,
+      oferta: { include: { produtor: { select: { nome: true } } } },
+      comprador: { select: { nome: true } },
       frete: true,
     },
     orderBy: { criado_em: 'desc' },

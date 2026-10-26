@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight, Bell, Building2, CheckCircle2, Clock3,
   MapPin, Package, Search, ShieldCheck, Truck,
 } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
+import { orderService, type BackendOrder, type OrderStatus } from "../../services/orderService";
 
 type Stage = "Negociando" | "Fechado" | "Em transporte" | "Entregue";
 type Order = {
@@ -24,16 +25,29 @@ type Order = {
   lastUpdate: string;
 };
 
-const sampleOrders: Order[] = [
-  { id: "PED-2481", product: "Café Arábica Especial", buyer: "Cooperativa Cerrado", quantity: 320, weightTons: 19.2, price: 398400, stage: "Fechado", origin: "Patos de Minas, MG", farm: "Fazenda Boa Vista · acesso liberado", destination: "Patrocínio, MG", deliveryPoint: "Unidade Cerrado · doca 3", carrier: "Rota Forte Logística · ANTT verificado", driver: "Marcos Almeida", vehicle: "Bitrem · BRA2E19", lastUpdate: "Há 2 min" },
-  { id: "PED-2472", product: "Soja Standard Tipo 1", buyer: "Alimentos Minas", quantity: 600, weightTons: 36, price: 78900, stage: "Em transporte", origin: "Presidente Olegário, MG", farm: "Fazenda Santa Luzia", destination: "Patos de Minas, MG", deliveryPoint: "Centro de recebimento", carrier: "Transportes Horizonte · ANTT verificado", driver: "Carlos Ribeiro", vehicle: "Carreta · QWE4D56", lastUpdate: "Há 1h" },
-  { id: "PED-2468", product: "Milho Safrinha Seco", buyer: "Armazéns Triângulo", quantity: 480, weightTons: 28.8, price: 31920, stage: "Negociando", origin: "Lagoa Formosa, MG", farm: "Fazenda Santa Clara", destination: "Uberlândia, MG", deliveryPoint: "Armazém central", lastUpdate: "Ontem" },
-  { id: "PED-2459", product: "Feijão Carioca Tipo 1", buyer: "Grãos do Alto Paranaíba", quantity: 180, weightTons: 10.8, price: 42840, stage: "Entregue", origin: "Patos de Minas, MG", farm: "Fazenda Boa Vista", destination: "Araxá, MG", deliveryPoint: "Unidade Grãos do Alto", carrier: "Expresso Rural · ANTT verificado", driver: "André Silva", vehicle: "Truck · HJK7A42", lastUpdate: "22 out. 2026" },
-  { id: "PED-2450", product: "Café Arábica Tradicional", buyer: "Cerealista Horizonte", quantity: 200, weightTons: 12, price: 196000, stage: "Entregue", origin: "Patrocínio, MG", farm: "Fazenda Alto Verde", destination: "Patos de Minas, MG", deliveryPoint: "Armazém Horizonte", carrier: "Rota Forte Logística · ANTT verificado", driver: "Marcos Almeida", vehicle: "Bitrem · BRA2E19", lastUpdate: "20 out. 2026" },
-  { id: "PED-2443", product: "Milho Tipo 1", buyer: "Cooperativa Campo Vivo", quantity: 350, weightTons: 21, price: 22400, stage: "Entregue", origin: "Patos de Minas, MG", farm: "Fazenda Boa Vista", destination: "Monte Carmelo, MG", deliveryPoint: "Cooperativa Campo Vivo", carrier: "Expresso Rural · ANTT verificado", driver: "André Silva", vehicle: "Truck · HJK7A42", lastUpdate: "15 out. 2026" },
-  { id: "PED-2434", product: "Soja Standard Tipo 1", buyer: "Alimentos Minas", quantity: 240, weightTons: 14.4, price: 31560, stage: "Entregue", origin: "Presidente Olegário, MG", farm: "Fazenda Santa Luzia", destination: "Patos de Minas, MG", deliveryPoint: "Centro de recebimento", carrier: "Transportes Horizonte · ANTT verificado", driver: "Carlos Ribeiro", vehicle: "Carreta · QWE4D56", lastUpdate: "10 out. 2026" },
-  { id: "PED-2421", product: "Feijão Carioca Tipo 1", buyer: "Armazéns Triângulo", quantity: 120, weightTons: 7.2, price: 28560, stage: "Entregue", origin: "Patos de Minas, MG", farm: "Fazenda Boa Vista", destination: "Uberlândia, MG", deliveryPoint: "Armazém central", carrier: "Expresso Rural · ANTT verificado", driver: "André Silva", vehicle: "Truck · HJK7A42", lastUpdate: "02 out. 2026" },
-];
+const STAGE_BY_STATUS: Record<OrderStatus, Stage> = {
+  ABERTO: "Negociando",
+  NEGOCIANDO: "Negociando",
+  FECHADO: "Fechado",
+  EM_TRANSPORTE: "Em transporte",
+  ENTREGUE: "Entregue",
+};
+function toOrder(pedido: BackendOrder): Order {
+  return {
+    id: pedido.codigo,
+    product: pedido.oferta.produto,
+    buyer: pedido.comprador?.nome ?? "—",
+    quantity: Number(pedido.quantidade_final),
+    weightTons: Number(pedido.frete?.peso_toneladas ?? 0),
+    price: Number(pedido.preco_final) * Number(pedido.quantidade_final),
+    stage: STAGE_BY_STATUS[pedido.status],
+    origin: pedido.oferta.localizacao,
+    farm: pedido.oferta.produtor?.nome ?? "",
+    destination: pedido.endereco_entrega,
+    deliveryPoint: "Endereço de entrega",
+    lastUpdate: new Date(pedido.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
+  };
+}
 
 const links = [
   { label: "Visão geral", href: "/produtor" },
@@ -54,11 +68,14 @@ function stageIndex(stage: Stage) {
 }
 
 export default function ProducerOrdersPage() {
-  const [selectedId, setSelectedId] = useState("PED-2481");
-  const [filter, setFilter] = useState<"Todas" | "Em andamento" | "Concluídos">("Em andamento");
+  const [selectedId, setSelectedId] = useState("");
+  const [filter, setFilter] = useState<"Todas" | "Em andamento" | "Concluídos">("Todas");
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const [orders] = useState(sampleOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
+  useEffect(() => {
+    orderService.list().then((pedidos) => setOrders(pedidos.map(toOrder))).catch(() => setOrders([]));
+  }, []);
   const underway = orders.filter((order) => order.stage !== "Entregue").length;
   const completed = orders.filter((order) => order.stage === "Entregue").length;
   const visible = useMemo(() => orders.filter((order) => {
@@ -99,7 +116,7 @@ export default function ProducerOrdersPage() {
           <div className="flex items-center gap-3">
             {showSearch && <label className="flex items-center gap-2 rounded-lg border border-[#dce4d9] bg-white px-3 py-2"><Search size={15}/><input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} className="w-44 bg-transparent text-sm outline-none" placeholder="Produto, comprador ou pedido" /></label>}
             <button type="button" onClick={() => { setShowSearch((old) => !old); setSearch(""); }} aria-label="Pesquisar pedidos" className="rounded-lg border border-[#dce4d9] bg-white p-2.5 text-[#5b7760]"><Search size={16}/></button>
-            <span className="text-xs text-[#87938a]">Dados demonstrativos</span>
+            <span className="text-xs text-[#87938a]">{orders.length} no total</span>
           </div>
         </div>
 
@@ -143,7 +160,7 @@ export default function ProducerOrdersPage() {
               <div className="grid items-center gap-3 md:grid-cols-[1fr_auto_1fr]"><div className="rounded-xl bg-[#f0f5eb] p-4"><p className="text-[10px] font-extrabold uppercase text-[#2d6922]">Origem</p><strong className="mt-1 block text-sm">{display.origin}</strong><p className="mt-1 text-xs text-[#78877d]">{display.farm}</p></div><ArrowRight size={18} className="mx-auto rotate-90 text-[#2d6922] md:rotate-0"/><div className="rounded-xl bg-[#f0f5eb] p-4"><p className="text-[10px] font-extrabold uppercase text-[#2d6922]">Destino</p><strong className="mt-1 block text-sm">{display.destination}</strong><p className="mt-1 text-xs text-[#78877d]">{display.deliveryPoint}</p></div></div>
               <p className="mt-3 flex items-center gap-2 rounded-lg bg-[#f0f5eb] p-3 text-xs text-[#66776b]"><ShieldCheck size={16} className="shrink-0 text-[#2d6922]"/> CPF/CNPJ e endereço completo ficam protegidos e são exibidos apenas conforme a autorização da negociação.</p>
             </section>
-            <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-[#87938a]"><span className="flex items-center gap-2"><Package size={14}/> Pedido demonstrativo: sem rastreamento ou integração reais</span><span className="flex items-center gap-2"><Bell size={14}/> Atualizado: {display.lastUpdate}</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-[#87938a]"><span className="flex items-center gap-2"><Package size={14}/> Dados do banco de dados</span><span className="flex items-center gap-2"><Bell size={14}/> Atualizado: {display.lastUpdate}</span></div>
           </div>}
         </div>
       </main>

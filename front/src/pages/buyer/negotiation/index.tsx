@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BadgeCheck, CalendarDays, CheckCircle2, CircleDollarSign, MapPin, Package, Send, ShieldCheck, Star, Wheat } from 'lucide-react'
 import ProfileNavbar from '../../../components/ProfileNavbar'
+import { offerService, type BackendOffer } from '../../../services/offerService'
 import soja from '../../../assets/offer-soja.jpg'
 import cafe from '../../../assets/offer-cafe.png'
 import milho from '../../../assets/offer-milho.jpg'
@@ -16,26 +17,91 @@ const products: Product[] = [
 ]
 const money = (n: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n)
 function parsePrice(value: string) { const n = Number(value.replace(/[^\d,]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0 }
+function toProduct(o: BackendOffer): Product {
+  const unitName = o.unidade.toLowerCase()
+  return {
+    id: o.id,
+    name: o.produto,
+    subtitle: `${o.qualidade} · ${Number(o.quantidade)} ${o.unidade}`,
+    description: o.descricao ?? '',
+    location: o.localizacao,
+    price: Number(o.preco),
+    available: Number(o.quantidade),
+    unit: unitName.startsWith('saca') ? 'sc' : unitName.startsWith('ton') ? 't' : 'kg',
+    image: o.imagem_url || (o.categoria === 'Café' ? cafe : o.categoria === 'Milho' ? milho : o.categoria === 'Soja' ? soja : algodao),
+    badge: `${o.categoria} · SAFRA ${o.safra}`.toUpperCase(),
+    seller: o.produtor?.nome ?? 'Produtor',
+  }
+}
 
 export default function BuyerNegotiationPage() {
   const { offerId } = useParams<{ offerId: string }>()
-  const product = products.find(p => p.id === offerId) ?? products[0]
+  const placeholder = products.find(p => p.id === offerId)
+  const isReal = !placeholder
+  const [remote, setRemote] = useState<Product | null>(null)
+  const [notFound, setNotFound] = useState(false)
+  const product = placeholder ?? remote ?? products[0]
   const [quantity, setQuantity] = useState('200')
   const [price, setPrice] = useState('142,00')
+  const [address, setAddress] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
   const [message, setMessage] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  useEffect(() => {
+    if (placeholder) return
+    offerService.listActive().then(list => {
+      const found = list.find(o => o.id === offerId)
+      if (!found) { setNotFound(true); return }
+      const next = toProduct(found)
+      setRemote(next)
+      setQuantity('1')
+      setPrice(String(next.price).replace('.', ','))
+    }).catch(() => setNotFound(true))
+  }, [offerId, placeholder])
   const tons = Number(quantity) || 0
-  const sacks = tons * 1000 / 60
+  const sacks = isReal ? tons : tons * 1000 / 60
   const offerPrice = parsePrice(price)
   const total = sacks * offerPrice
   const savings = sacks * (product.price - offerPrice)
-  const valid = tons > 0 && tons <= product.available && offerPrice > 0
+  const valid = tons > 0 && tons <= product.available && offerPrice > 0 && (!isReal || address.trim().length >= 5)
+  const quantityUnit = isReal ? product.unit : 'ton'
+  async function send(buyNow: boolean) {
+    if (!valid) return
+    if (!isReal) {
+      setFailed(false)
+      setSubmitted(true)
+      setMessage(buyNow ? 'Aceite demonstrativo registrado nesta página. Nenhum pagamento ou pedido real foi criado.' : 'Proposta demonstrativa registrada nesta página. Para enviar ao produtor de verdade, é necessário conectar ao back-end.')
+      return
+    }
+    setBusy(true)
+    try {
+      if (buyNow) await offerService.buyNow({ oferta_id: product.id, quantidade: tons, endereco_entrega: address.trim() })
+      else await offerService.propose({ oferta_id: product.id, quantidade: tons, preco: offerPrice, endereco_entrega: address.trim() })
+      setFailed(false)
+      setMessage(buyNow ? 'Pedido criado e salvo no banco de dados. Veja em Meus pedidos.' : 'Proposta enviada ao produtor e salva no banco de dados.')
+    } catch (error) {
+      setFailed(true)
+      setMessage(error instanceof Error ? error.message : 'Não foi possível concluir a operação.')
+    } finally {
+      setSubmitted(true)
+      setBusy(false)
+    }
+  }
   const details = useMemo(() => [
-    { icon: Package, label: 'DISPONIBILIDADE', value: `${product.available} toneladas` },
+    { icon: Package, label: 'DISPONIBILIDADE', value: `${product.available} ${isReal ? product.unit : 'toneladas'}` },
     { icon: ShieldCheck, label: 'CONDIÇÃO', value: 'FOB fazenda' },
     { icon: CalendarDays, label: 'RETIRADA', value: '20–30 set. 2026' },
     { icon: CircleDollarSign, label: 'PAGAMENTO', value: 'À vista na entrega' },
-  ], [product])
+  ], [product, isReal])
+
+  if (isReal && !remote) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
+        <p className="text-sm font-bold">{notFound ? 'Oferta não encontrada.' : 'Carregando oferta...'} <Link className="ml-2 underline" to="/comprador">Voltar ao marketplace</Link></p>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
@@ -53,7 +119,7 @@ export default function BuyerNegotiationPage() {
 
       <main className="mx-auto max-w-[1440px] px-5 pb-16 pt-9 md:px-12">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-xs font-semibold text-[#708077]"><Link className="hover:underline" to="/comprador">Marketplace</Link> <span className="mx-2">›</span> Oferta #{product.id === '1' ? 'SLM-2841' : `SLM-${2840 + Number(product.id)}`}</p><h1 className="mt-2 font-['Bricolage_Grotesque'] text-3xl font-extrabold md:text-4xl">Negocie direto com o produtor</h1><p className="mt-2 text-sm text-[#708077]">Revise o lote, ajuste sua proposta e acompanhe o valor estimado antes de enviar.</p></div>
+          <div><p className="text-xs font-semibold text-[#708077]"><Link className="hover:underline" to="/comprador">Marketplace</Link> <span className="mx-2">›</span> Oferta #{isReal ? product.id.slice(0, 8).toUpperCase() : product.id === '1' ? 'SLM-2841' : `SLM-${2840 + Number(product.id)}`}</p><h1 className="mt-2 font-['Bricolage_Grotesque'] text-3xl font-extrabold md:text-4xl">Negocie direto com o produtor</h1><p className="mt-2 text-sm text-[#708077]">Revise o lote, ajuste sua proposta e acompanhe o valor estimado antes de enviar.</p></div>
           <span className="inline-flex items-center gap-2 rounded-full bg-[#e8f5ce] px-4 py-2 text-xs font-bold text-[#287a48]"><span className="size-2 rounded-full bg-[#287a48]" /> Oferta ativa · válida até 15/09/2026</span>
         </div>
 
@@ -68,16 +134,17 @@ export default function BuyerNegotiationPage() {
 
           <section className="rounded-[24px] border border-[#cfe0bb] bg-white p-6 shadow-[0_10px_25px_rgba(16,34,23,.08)] md:p-7" aria-label="Fazer proposta">
             <h2 className="font-['Bricolage_Grotesque'] text-2xl font-extrabold">Fazer proposta</h2><p className="mt-1 text-sm text-[#708077]">Informe quantidade e preço por saca. Você poderá revisar tudo antes do fechamento.</p>
-            <form onSubmit={event => { event.preventDefault(); if (valid) { setSubmitted(true); setMessage('Proposta demonstrativa registrada nesta página. Para enviar ao produtor de verdade, é necessário conectar ao back-end.') } }}>
-              <div className="mt-6 grid gap-3 sm:grid-cols-2"><label className="text-[11px] font-extrabold uppercase text-[#415247]">Quantidade (ton)<div className="mt-2 flex items-center gap-2 rounded-xl border border-[#d4e2c4] px-3"><Wheat size={17} className="text-[#708077]" /><input type="number" min="0.01" max={product.available} step="0.01" value={quantity} onChange={event => { setQuantity(event.target.value); setSubmitted(false) }} className="w-full py-3 text-sm outline-none" /></div><span className="mt-1 block text-[11px] font-normal normal-case text-[#708077]">Equivale a {sacks.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} sacas de 60 kg</span></label>
-              <label className="text-[11px] font-extrabold uppercase text-[#415247]">Preço ofertado (R$/sc)<div className="mt-2 flex items-center gap-2 rounded-xl border border-[#d4e2c4] px-3"><CircleDollarSign size={17} className="text-[#708077]" /><input type="text" inputMode="decimal" value={price} onChange={event => { setPrice(event.target.value); setSubmitted(false) }} className="w-full py-3 text-sm outline-none" /></div><span className="mt-1 block text-[11px] font-normal normal-case text-[#708077]">{money(product.price - offerPrice)} abaixo do preço publicado</span></label></div>
-              <div className="mt-6 space-y-3 rounded-2xl border border-[#e6e9df] bg-[#f8f7f1] p-4 text-sm"><div className="flex justify-between gap-3 text-[#708077]"><span>Volume convertido</span><strong className="text-[#102217]">{sacks.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} sacas</strong></div><div className="flex justify-between gap-3 border-t border-[#e6e9df] pt-3 text-[#708077]"><span>Subtotal da mercadoria</span><strong className="text-[#102217]">{money(total)}</strong></div><div className="flex justify-between gap-3 border-t border-[#e6e9df] pt-3 text-[#708077]"><span>Frete</span><strong className="text-[#102217]">Calculado no fechamento</strong></div><div className="flex justify-between gap-3 border-t border-[#e6e9df] pt-3"><span>Total estimado</span><strong className="text-lg text-[#102217]">{money(total)}</strong></div></div>
+            <form onSubmit={event => { event.preventDefault(); void send(false) }}>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2"><label className="text-[11px] font-extrabold uppercase text-[#415247]">Quantidade ({quantityUnit})<div className="mt-2 flex items-center gap-2 rounded-xl border border-[#d4e2c4] px-3"><Wheat size={17} className="text-[#708077]" /><input type="number" min="0.01" max={product.available} step="0.01" value={quantity} onChange={event => { setQuantity(event.target.value); setSubmitted(false) }} className="w-full py-3 text-sm outline-none" /></div><span className="mt-1 block text-[11px] font-normal normal-case text-[#708077]">Equivale a {sacks.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} {isReal ? product.unit : 'sacas de 60 kg'}</span></label>
+              <label className="text-[11px] font-extrabold uppercase text-[#415247]">Preço ofertado (R$/{isReal ? product.unit : 'sc'})<div className="mt-2 flex items-center gap-2 rounded-xl border border-[#d4e2c4] px-3"><CircleDollarSign size={17} className="text-[#708077]" /><input type="text" inputMode="decimal" value={price} onChange={event => { setPrice(event.target.value); setSubmitted(false) }} className="w-full py-3 text-sm outline-none" /></div><span className="mt-1 block text-[11px] font-normal normal-case text-[#708077]">{money(product.price - offerPrice)} abaixo do preço publicado</span></label></div>
+              <div className="mt-6 space-y-3 rounded-2xl border border-[#e6e9df] bg-[#f8f7f1] p-4 text-sm"><div className="flex justify-between gap-3 text-[#708077]"><span>Volume convertido</span><strong className="text-[#102217]">{sacks.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} {isReal ? product.unit : 'sacas'}</strong></div><div className="flex justify-between gap-3 border-t border-[#e6e9df] pt-3 text-[#708077]"><span>Subtotal da mercadoria</span><strong className="text-[#102217]">{money(total)}</strong></div><div className="flex justify-between gap-3 border-t border-[#e6e9df] pt-3 text-[#708077]"><span>Frete</span><strong className="text-[#102217]">Calculado no fechamento</strong></div><div className="flex justify-between gap-3 border-t border-[#e6e9df] pt-3"><span>Total estimado</span><strong className="text-lg text-[#102217]">{money(total)}</strong></div></div>
               <div className="mt-5 rounded-xl bg-[#e8f5ce] px-4 py-3 text-xs font-semibold text-[#287a48]">{savings >= 0 ? `↘ Sua proposta representa uma economia estimada de ${money(savings)}.` : `Sua proposta está ${money(-savings)} acima do preço publicado.`}</div>
-              {!valid && <p className="mt-3 text-xs font-semibold text-red-700">Informe uma quantidade entre 0 e {product.available} toneladas e um preço maior que zero.</p>}
-              <button type="submit" disabled={!valid} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#c1f23c] px-5 py-4 text-sm font-extrabold text-[#102217] transition hover:bg-[#d5fa73] disabled:cursor-not-allowed disabled:opacity-50">Enviar proposta <Send size={16} /></button>
-              <button type="button" disabled={!valid} onClick={() => { setSubmitted(true); setMessage('Aceite demonstrativo registrado nesta página. Nenhum pagamento ou pedido real foi criado.') }} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[#173b21] px-5 py-3.5 text-sm font-bold transition hover:bg-[#f4f8ee] disabled:opacity-50">Aceitar preço publicado · {money(sacks * product.price)} <CheckCircle2 size={16} /></button>
-              {submitted && <p role="status" className="mt-3 rounded-xl bg-[#e8f5ce] p-3 text-xs font-semibold text-[#287a48]">{message}</p>}
-              <p className="mt-5 flex items-center gap-2 rounded-xl bg-[#eef2e8] p-3 text-[11px] text-[#708077]"><ShieldCheck size={17} className="shrink-0 text-[#287a48]" /> Ambiente demonstrativo. Negociações reais exigem integração ao servidor.</p>
+              {isReal && <label className="mt-4 block text-[11px] font-extrabold uppercase text-[#415247]">Endereço de entrega<input type="text" value={address} onChange={event => { setAddress(event.target.value); setSubmitted(false) }} placeholder="Rua, número, cidade e estado" className="mt-2 w-full rounded-xl border border-[#d4e2c4] px-3 py-3 text-sm font-normal normal-case outline-none" /></label>}
+              {!valid && <p className="mt-3 text-xs font-semibold text-red-700">Informe uma quantidade entre 0 e {product.available} {isReal ? product.unit : 'toneladas'}, um preço maior que zero{isReal ? ' e o endereço de entrega' : ''}.</p>}
+              <button type="submit" disabled={!valid || busy} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#c1f23c] px-5 py-4 text-sm font-extrabold text-[#102217] transition hover:bg-[#d5fa73] disabled:cursor-not-allowed disabled:opacity-50">Enviar proposta <Send size={16} /></button>
+              <button type="button" disabled={!valid || busy} onClick={() => void send(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[#173b21] px-5 py-3.5 text-sm font-bold transition hover:bg-[#f4f8ee] disabled:opacity-50">Aceitar preço publicado · {money(sacks * product.price)} <CheckCircle2 size={16} /></button>
+              {submitted && <p role="status" className={`mt-3 rounded-xl p-3 text-xs font-semibold ${failed ? 'bg-red-50 text-red-700' : 'bg-[#e8f5ce] text-[#287a48]'}`}>{message}</p>}
+              <p className="mt-5 flex items-center gap-2 rounded-xl bg-[#eef2e8] p-3 text-[11px] text-[#708077]"><ShieldCheck size={17} className="shrink-0 text-[#287a48]" /> {isReal ? 'Oferta real: propostas e pedidos são gravados no banco de dados.' : 'Ambiente demonstrativo. Negociações reais exigem integração ao servidor.'}</p>
             </form>
           </section>
         </div>

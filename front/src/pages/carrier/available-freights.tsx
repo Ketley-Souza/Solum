@@ -386,6 +386,8 @@ export default function AvailableFreightsPage() {
               </select>
             </label>
 
+            <VehicleForm onCreated={() => void load()} />
+
             {compatibleVehicles.length === 0 && (
               <p className="mt-3 text-sm text-amber-700">
                 Você não possui um veículo compatível com esta carga.
@@ -417,6 +419,64 @@ export default function AvailableFreightsPage() {
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+const vehicleTypes = ["VUC", "TOCO", "TRUCK", "CARRETA", "BITREM", "RODOTREM"];
+
+/** Cadastro de veiculo na frota do transportador (grava no banco). */
+function VehicleForm({ onCreated }: { onCreated: () => void }) {
+  const [type, setType] = useState("TRUCK");
+  const [capacity, setCapacity] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState("");
+
+  async function save() {
+    setSaving(true);
+    setFeedback("");
+    try {
+      await transportService.createVehicle(type, Number(capacity.replace(",", ".")));
+      setCapacity("");
+      setFeedback("Ve\u00edculo cadastrado.");
+      onCreated();
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : "N\u00e3o foi poss\u00edvel cadastrar o ve\u00edculo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-[#dfe6da] bg-[#f4f8ef] p-4">
+      <p className="text-sm font-bold">{"Cadastrar novo ve\u00edculo"}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <select
+          value={type}
+          onChange={(event) => setType(event.target.value)}
+          className="rounded-xl border border-[#dfe6da] bg-white p-2.5 text-sm"
+        >
+          {vehicleTypes.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+        <input
+          value={capacity}
+          onChange={(event) => setCapacity(event.target.value)}
+          inputMode="decimal"
+          placeholder="Capacidade (t)"
+          className="w-36 rounded-xl border border-[#dfe6da] bg-white p-2.5 text-sm"
+        />
+        <button
+          type="button"
+          disabled={saving || !(Number(capacity.replace(",", ".")) > 0)}
+          onClick={() => void save()}
+          className="rounded-xl bg-[#2f681f] px-4 py-2.5 text-sm font-extrabold text-white disabled:opacity-50"
+        >
+          {saving ? "Salvando..." : "Cadastrar"}
+        </button>
+      </div>
+      {feedback && <p className="mt-2 text-xs font-semibold text-[#2f681f]">{feedback}</p>}
     </div>
   );
 }
