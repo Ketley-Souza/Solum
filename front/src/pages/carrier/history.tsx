@@ -1,66 +1,109 @@
-import { CalendarDays, CheckCircle2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2,
+  MapPin,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
+import {
+  transportService,
+  type Freight,
+} from "../../services/transportService";
+import { useAuthStore } from "../../stores/authStore";
 
 const links = [
   { label: "Visão geral", href: "/transportador" },
-  {
-    label: "Fretes disponíveis",
-    href: "/transportador/fretes-disponiveis",
-  },
+  { label: "Fretes disponíveis", href: "/transportador/fretes-disponiveis" },
   { label: "Meus fretes", href: "/transportador/meus-fretes" },
   { label: "Histórico", href: "/transportador/historico" },
 ];
 
-const completed = [
-  {
-    id: "FR-1874",
-    product: "Soja a granel",
-    origin: "Uberaba, MG",
-    destination: "São Paulo, SP",
-    date: "14 out, 2026",
-    distance: "490 km",
-    price: "R$ 6.800",
-  },
-  {
-    id: "FR-1829",
-    product: "Milho a granel",
-    origin: "Rio Verde, GO",
-    destination: "Uberlândia, MG",
-    date: "10 out, 2026",
-    distance: "410 km",
-    price: "R$ 5.950",
-  },
-  {
-    id: "FR-1761",
-    product: "Café ensacado",
-    origin: "Patrocínio, MG",
-    destination: "Ribeirão Preto, SP",
-    date: "06 out, 2026",
-    distance: "310 km",
-    price: "R$ 4.600",
-  },
-  {
-    id: "FR-1705",
-    product: "Farelo de soja",
-    origin: "Rondonópolis, MT",
-    destination: "Campo Grande, MS",
-    date: "02 out, 2026",
-    distance: "490 km",
-    price: "R$ 6.100",
-  },
-];
+function money(value: number | string | null) {
+  if (value == null) return "A confirmar";
+
+  return Number(value).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
 
 export default function CarrierHistoryPage() {
+  const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
+
+  const [freights, setFreights] = useState<Freight[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const allFreights = await transportService.listFreights("ENTREGUE");
+
+      setFreights(
+        allFreights.filter(
+          (freight) =>
+            freight.transportador_id === user?.id &&
+            freight.status === "ENTREGUE",
+        ),
+      );
+    } catch (err) {
+      setFreights([]);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Não foi possível carregar o histórico.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, [user?.id]);
+
+  const filtered = useMemo(() => {
+    const term = search.toLowerCase();
+
+    return freights.filter((freight) => {
+      const content = [
+        freight.codigo,
+        freight.endereco_origem,
+        freight.endereco_destino,
+        freight.pedido?.oferta?.produto,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return content.includes(term);
+    });
+  }, [freights, search]);
+
+  const total = freights.reduce(
+    (sum, freight) => sum + Number(freight.valor_frete ?? 0),
+    0,
+  );
+
   return (
     <div className="min-h-screen bg-[#fafaf8] font-['Manrope'] text-[#0b150c]">
-
       <ProfileNavbar
-        profileName="Marcos"
+        profileName={user?.name || "Transportador"}
         role="TRANSPORTADOR"
         links={links}
       />
 
       <main className="mx-auto max-w-[1440px] px-5 py-8 md:px-10 lg:px-12">
+        {token === "dev" && (
+          <p className="mb-5 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
+            Modo de demonstração — histórico fictício.
+          </p>
+        )}
+
         <p className="text-sm font-extrabold uppercase tracking-wide text-[#548047]">
           Seu desempenho
         </p>
@@ -70,93 +113,148 @@ export default function CarrierHistoryPage() {
             <h1 className="font-['Bricolage_Grotesque'] text-3xl font-extrabold md:text-4xl">
               Histórico de fretes
             </h1>
+
             <p className="mt-2 text-sm text-[#66736a]">
-              Consulte os transportes concluídos e acompanhe seu histórico de
-              entregas.
+              Consulte os transportes concluídos e os valores recebidos.
             </p>
           </div>
 
-          <div className="rounded-xl border border-[#e2e8dd] bg-white px-4 py-3">
-            <p className="text-xs text-[#718075]">Fretes concluídos</p>
-            <p className="mt-1 text-2xl font-extrabold">28</p>
-          </div>
+          <button
+            onClick={() => void load()}
+            className="flex items-center gap-2 rounded-xl border border-[#dfe6da] bg-white px-4 py-3 text-sm font-bold"
+          >
+            <RefreshCw size={16} />
+            Atualizar
+          </button>
         </div>
 
-        <div className="mt-7 grid gap-4 sm:grid-cols-3">
+        {error && (
+          <p
+            role="alert"
+            className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="mt-7 grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border border-[#e4e9e1] bg-white p-5">
-            <p className="text-sm text-[#718075]">Total recebido</p>
-            <p className="mt-2 text-2xl font-extrabold text-[#2f681f]">
-              R$ 86.450
+            <p className="text-sm text-[#718075]">
+              Fretes concluídos
+            </p>
+
+            <p className="mt-2 text-3xl font-extrabold">
+              {loading ? "—" : freights.length}
             </p>
           </div>
+
           <div className="rounded-2xl border border-[#e4e9e1] bg-white p-5">
-            <p className="text-sm text-[#718075]">Distância percorrida</p>
-            <p className="mt-2 text-2xl font-extrabold">12.480 km</p>
-          </div>
-          <div className="rounded-2xl border border-[#e4e9e1] bg-white p-5">
-            <p className="text-sm text-[#718075]">Avaliação média</p>
-            <p className="mt-2 text-2xl font-extrabold">
-              4,8 <span className="text-sm text-[#718075]">/ 5,0</span>
+            <p className="text-sm text-[#718075]">
+              Valor total dos fretes concluídos
+            </p>
+
+            <p className="mt-2 text-3xl font-extrabold text-[#2f681f]">
+              {loading ? "—" : money(total)}
             </p>
           </div>
         </div>
 
-        <div className="mt-8 flex items-center justify-between gap-3">
-          <h2 className="text-xl font-extrabold">Entregas recentes</h2>
-          <span className="text-sm text-[#718075]">Outubro de 2026</span>
-        </div>
+        <label className="mt-7 flex items-center gap-3 rounded-xl border border-[#e1e6de] bg-white px-4 py-3">
+          <Search size={18} className="text-[#718075]" />
 
-        <div className="mt-4 overflow-hidden rounded-2xl border border-[#e4e9e1] bg-white">
-          {completed.map((freight, index) => (
-            <article
-              key={freight.id}
-              className={`flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between ${
-                index ? "border-t border-[#edf0e9]" : ""
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <span className="rounded-xl bg-[#eaf5e3] p-2.5 text-[#2f681f]">
-                  <CheckCircle2 size={20} />
-                </span>
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar por código, carga ou cidade"
+            className="w-full bg-transparent text-sm outline-none"
+          />
+        </label>
 
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-extrabold">{freight.product}</h3>
-                    <span className="rounded-full bg-[#eaf5e3] px-2.5 py-1 text-[10px] font-extrabold uppercase text-[#2f681f]">
-                      Concluído
-                    </span>
+        {loading ? (
+          <p className="mt-8 text-center text-sm text-[#718075]">
+            Carregando histórico...
+          </p>
+        ) : filtered.length === 0 ? (
+          <div className="mt-6 rounded-2xl border bg-white p-10 text-center">
+            <CheckCircle2
+              size={32}
+              className="mx-auto text-[#719166]"
+            />
+
+            <h2 className="mt-3 font-extrabold">
+              Nenhuma entrega encontrada.
+            </h2>
+
+            <p className="mt-2 text-sm text-[#718075]">
+              Quando você confirmar uma entrega, ela aparecerá aqui.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-[#e4e9e1] bg-white">
+            {filtered.map((freight, index) => (
+              <article
+                key={freight.id}
+                className={`flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between ${
+                  index > 0 ? "border-t border-[#edf0e9]" : ""
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="rounded-xl bg-[#eaf5e3] p-3 text-[#2f681f]">
+                    <CheckCircle2 size={21} />
+                  </span>
+
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-extrabold">
+                        {freight.codigo}
+                      </h3>
+
+                      <span className="rounded-full bg-[#eaf5e3] px-3 py-1 text-xs font-extrabold text-[#2f681f]">
+                        Entregue
+                      </span>
+                    </div>
+
+                    <p className="mt-1 text-sm font-semibold">
+                      {freight.pedido?.oferta?.produto ||
+                        "Carga agrícola"}
+                    </p>
+
+                    <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[#718075]">
+                      <MapPin size={15} />
+                      {freight.endereco_origem}
+                      <span>→</span>
+                      {freight.endereco_destino}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs text-[#718075]">{freight.id}</p>
-                  <p className="mt-2 text-sm text-[#4d5b50]">
-                    {freight.origin} <span className="px-1">→</span>{" "}
-                    {freight.destination}
-                  </p>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:min-w-[380px]">
-                <div>
-                  <p className="text-xs text-[#718075]">Data de entrega</p>
-                  <p className="mt-1 text-sm font-bold">{freight.date}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-[#718075]">Distância</p>
-                  <p className="mt-1 text-sm font-bold">{freight.distance}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-[#718075]">Valor</p>
-                  <p className="mt-1 text-sm font-extrabold text-[#2f681f]">
-                    {freight.price}
-                  </p>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-xs text-[#718075]">
+                      Data registrada
+                    </p>
 
-        <p className="mt-5 text-center text-xs text-[#849087]">
-          Dados ilustrativos; nenhum histórico real foi consultado.
-        </p>
+                    <p className="mt-1 text-sm font-bold">
+                      {new Date(
+                        freight.atualizado_em,
+                      ).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-[#718075]">
+                      Valor do frete
+                    </p>
+
+                    <p className="mt-1 text-sm font-extrabold text-[#2f681f]">
+                      {money(freight.valor_frete)}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );

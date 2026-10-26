@@ -55,7 +55,6 @@ export async function aceitarFrete(ator: UsuarioAutenticado, freteId: string, ve
   })
 }
 
-/** Transição do frete pelo transportador responsável, sincronizada com o Pedido (RN08). */
 async function avancarFrete(
   ator: UsuarioAutenticado,
   freteId: string,
@@ -88,14 +87,59 @@ export function confirmarEntrega(ator: UsuarioAutenticado, freteId: string): Pro
   return avancarFrete(ator, freteId, StatusFrete.EM_ROTA, StatusFrete.ENTREGUE, StatusPedido.EM_TRANSPORTE, StatusPedido.ENTREGUE)
 }
 
-export async function listarFretes(ator: UsuarioAutenticado, statusFiltro?: StatusFrete): Promise<Frete[]> {
-  exigirPerfil(ator, PerfilUsuario.TRANSPORTADOR, PerfilUsuario.ADMINISTRADOR, PerfilUsuario.PRODUTOR, PerfilUsuario.COMPRADOR)
+export async function listarFretes(
+  ator: UsuarioAutenticado,
+  statusFiltro?: StatusFrete,
+): Promise<Frete[]> {
+  exigirPerfil(
+    ator,
+    PerfilUsuario.TRANSPORTADOR,
+    PerfilUsuario.ADMINISTRADOR,
+    PerfilUsuario.PRODUTOR,
+    PerfilUsuario.COMPRADOR,
+  );
+
+  const escopoTransportador =
+    ator.perfil === PerfilUsuario.TRANSPORTADOR
+      ? {
+          OR: [
+            {
+              status: StatusFrete.DISPONIVEL,
+              transportador_id: null,
+            },
+            {
+              transportador_id: ator.id,
+            },
+          ],
+        }
+      : {};
+
   return prisma.frete.findMany({
     where: {
       excluido_em: null,
-      ...(statusFiltro ? { status: statusFiltro } : {}),
-    },
-    orderBy: { criado_em: 'desc' },
-  })
-}
 
+      ...(statusFiltro
+        ? { status: statusFiltro }
+        : {}),
+
+      ...escopoTransportador,
+    },
+
+    include: {
+      pedido: {
+        include: {
+          oferta: {
+            select: {
+              produto: true,
+              categoria: true,
+            },
+          },
+        },
+      },
+    },
+
+    orderBy: {
+      criado_em: "desc",
+    },
+  });
+}
