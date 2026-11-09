@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: solum_dev
       POSTGRES_DB: solum
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - solum_pgdata:/var/lib/postgresql
 volumes:

@@ -113,7 +113,6 @@ export default function BuyerNegotiationPage() {
         links={[
           { label: 'Marketplace', href: '/comprador' },
           { label: 'Meus pedidos', href: '/comprador/pedidos' },
-          { label: 'Negociações', href: '/comprador/negociacao/1' },
         ]}
       />
 

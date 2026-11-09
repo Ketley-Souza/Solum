@@ -19,6 +19,7 @@ export function RequireProfile({ profile: required }: { profile: Profile }) {
   const token = useAuthStore((s) => s.token);
   const profile = useAuthStore((s) => s.profile);
   const expiresAt = useAuthStore((s) => s.expiresAt);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const clearAuth = useAuthStore((s) => s.clearAuth);
 
   const expired = expiresAt !== null && expiresAt <= Date.now();
@@ -28,6 +29,14 @@ export function RequireProfile({ profile: required }: { profile: Profile }) {
   useEffect(() => {
     if (expired) clearAuth();
   }, [expired, clearAuth]);
+
+  if (!hasHydrated) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#fafaf8] text-sm text-[#66736a]">
+        Carregando sua sessão...
+      </main>
+    );
+  }
 
   // Sem sessão válida: vai para o login e guarda de onde veio.
   if (!isAuthenticated) {

@@ -120,7 +120,7 @@ export default function EditOfferModal({
               Edição de oferta
             </span>
             <span className="text-xs text-[#78877d]">
-              Dados demonstrativos
+              Dados salvos no banco de dados
             </span>
           </div>
 

@@ -23,10 +23,6 @@ export function ProfileRoute({ requiredProfile, children }: ProfileRouteProps) {
   const profile = useAuthStore((s) => s.profile);
   const location = useLocation();
 
-  // ⚠️  DEV ONLY — bypassa verificação de perfil em desenvolvimento.
-  //    Removido automaticamente pelo Vite no build de produção.
-  if (import.meta.env.DEV) return <>{children}</>;
-
   // Perfil incompatível → redireciona para a área correta do usuário.
   if (profile !== requiredProfile) {
     const destination = profile ? `/${profile}` : "/login";

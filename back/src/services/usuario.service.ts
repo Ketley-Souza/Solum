@@ -70,6 +70,33 @@ export async function autenticarUsuario(
   return { token: gerarToken({ id: seguro.id, perfil: seguro.perfil, email: seguro.email }), usuario: seguro }
 }
 
+export async function obterPerfilUsuario(ator: UsuarioAutenticado): Promise<UsuarioSeguro> {
+  const usuario = await prisma.usuario.findFirst({
+    where: { id: ator.id, excluido_em: null },
+    select: SELECAO_SEGURA,
+  })
+  if (!usuario) throw new NotFoundError('Usuário não encontrado')
+  return usuario
+}
+
+export async function atualizarPerfilUsuario(
+  ator: UsuarioAutenticado,
+  dados: Pick<DadosCadastroUsuario, 'nome' | 'email' | 'whatsapp'>,
+): Promise<UsuarioSeguro> {
+  const email = dados.email.toLowerCase()
+  const existente = await prisma.usuario.findFirst({
+    where: { email, excluido_em: null, NOT: { id: ator.id } },
+    select: { id: true },
+  })
+  if (existente) throw new AppError('E-mail já está em uso', 409)
+
+  return prisma.usuario.update({
+    where: { id: ator.id },
+    data: { nome: dados.nome, email, whatsapp: dados.whatsapp },
+    select: SELECAO_SEGURA,
+  })
+}
+
 /** RN09 — suspensão/reativação exclusiva do ADMINISTRADOR. */
 export async function alterarStatusUsuario(
   ator: UsuarioAutenticado,

@@ -33,7 +33,7 @@ Crie o arquivo `back/.env` com a string de conexão correspondente ao `docker-co
 
 ```powershell
 Set-Content .env @"
-DATABASE_URL="postgresql://solum:solum_dev@localhost:5432/solum?schema=public"
+DATABASE_URL="postgresql://solum:solum_dev@localhost:5433/solum?schema=public"
 JWT_SECRET="chave-secreta-desenvolvimento-solum-2026"
 PORT=3333
 "@
@@ -48,7 +48,7 @@ docker compose up -d
 docker compose ps
 ```
 
-O serviço `db` responderá na porta `localhost:5432` com usuário `solum`, senha `solum_dev` e database `solum`.
+O serviço `db` responderá na porta `localhost:5433` com usuário `solum`, senha `solum_dev` e database `solum`.
 
 ---
 
@@ -115,3 +115,4 @@ Exemplo de login via PowerShell para obter o Bearer Token:
 $resp = Invoke-RestMethod -Method Post -Uri "http://localhost:3333/api/auth/login" -ContentType "application/json" -Body '{"email":"comprador@solum.com.br","senha":"Senha@123"}'
 $token = $resp.token
 ```
+

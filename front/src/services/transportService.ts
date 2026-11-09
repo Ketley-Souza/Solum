@@ -44,23 +44,16 @@ export interface TransportOffer {
   price: number;
 }
 
-/**
- * Envia o token real do usuário para o backend.
- *
- * Não aceita o token fictício "dev", pois ele
- * não é reconhecido pela autenticação do backend.
- */
+/** Envia o token do usuário autenticado para o backend. */
 function authenticatedRequest<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
   const token = useAuthStore.getState().token;
 
-  if (!token || token === "dev") {
+  if (!token) {
     return Promise.reject(
-      new Error(
-        "Entre com uma conta real de transportador para acessar os fretes do banco.",
-      ),
+      new Error("Entre com uma conta de transportador para acessar os fretes."),
     );
   }
 

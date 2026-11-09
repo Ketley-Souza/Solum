@@ -193,6 +193,18 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isCriar && !terms) { setError("Você precisa aceitar os Termos de Uso para continuar."); return; }
+    if (isCriar && !/[A-Z]/.test(password)) {
+      setError("A senha deve conter ao menos uma letra maiúscula.");
+      return;
+    }
+    if (isCriar && !/\d/.test(password)) {
+      setError("A senha deve conter ao menos um número.");
+      return;
+    }
+    if (isCriar && documento.replace(/\D/g, "").length !== 11 && documento.replace(/\D/g, "").length !== 14) {
+      setError("Informe um CPF com 11 dígitos ou um CNPJ com 14 dígitos.");
+      return;
+    }
     setError(null); setLoading(true);
     try {
       if (!isCriar) {

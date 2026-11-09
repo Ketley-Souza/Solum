@@ -1,19 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Bell, Check, CheckCheck, CheckCircle2, CircleDollarSign,
-  Clock3, Handshake, Mail, MoreHorizontal, PackageCheck,
-  Settings2, Tag, TrendingUp, Truck, Users, X,
+  Clock3, Handshake,   MoreHorizontal, PackageCheck,
+  Tag, TrendingUp, Truck, Users,
 } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
+import { useAuthStore } from "../../stores/authStore";
+import { notificationService, type BackendNotification } from "../../services/notificationService";
 
 type Category = "Negociações" | "Vendas" | "Pedidos" | "Oportunidades";
 type Notice = {
-  id: number;
+  id: string;
   title: string;
   description: string;
   time: string;
-  group: "Hoje" | "Ontem";
+  group: "Hoje" | "Anteriores";
   category: Category;
   action: string;
   link: string;
@@ -28,14 +30,27 @@ const navigation = [
   { label: "Pedidos", href: "/produtor/pedidos" },
 ];
 
-const sampleNotices: Notice[] = [
-  { id: 1, title: "Nova proposta recebida", description: "A Cooperativa Cerrado ofereceu R$ 1.245,00/saca pelo seu Café Arábica Especial.", time: "Há 18 min", group: "Hoje", category: "Negociações", action: "Ver negociação", link: "/produtor/negociacoes", unread: true, urgent: true },
-  { id: 2, title: "Transportador ainda não definido", description: "O pedido PED-2481 aguarda a confirmação do transportador para retirada da carga.", time: "Há 1h", group: "Hoje", category: "Pedidos", action: "Acompanhar pedido", link: "/produtor/pedidos", unread: true },
-  { id: 3, title: "Contraproposta respondida", description: "Armazéns Triângulo respondeu à sua condição para 480 sacas de milho.", time: "Há 3h", group: "Hoje", category: "Negociações", action: "Ver negociação", link: "/produtor/negociacoes", unread: true },
-  { id: 4, title: "Pagamento confirmado", description: "O pagamento referente ao pedido PED-2459 foi confirmado.", time: "Ontem, 16:40", group: "Ontem", category: "Vendas", action: "Ver pedido", link: "/produtor/pedidos", unread: false },
-  { id: 5, title: "Venda concluída", description: "A venda de Soja Standard para Alimentos Minas foi concluída.", time: "Ontem, 11:12", group: "Ontem", category: "Vendas", action: "Ver pedido", link: "/produtor/pedidos", unread: false },
-  { id: 6, title: "Oportunidade para sua produção", description: "Compradores estão buscando café na região de Patos de Minas.", time: "Ontem, 09:20", group: "Ontem", category: "Oportunidades", action: "Ver ofertas", link: "/produtor/ofertas", unread: false },
-];
+function toNotice(notification: BackendNotification): Notice {
+  const category: Category = notification.tipo_referencia === "PROPOSTA" || notification.tipo_referencia === "CONTRA_PROPOSTA"
+    ? "Negociações"
+    : notification.tipo_referencia === "PEDIDO" || notification.tipo_referencia === "FRETE"
+      ? "Pedidos"
+      : notification.tipo_referencia === "OFERTA" ? "Oportunidades" : "Vendas";
+  const link = category === "Negociações" ? "/produtor/negociacoes" : category === "Pedidos" ? "/produtor/pedidos" : "/produtor/ofertas";
+  const date = new Date(notification.criado_em);
+  return {
+    id: notification.id,
+    title: notification.titulo,
+    description: notification.mensagem,
+    time: date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
+    group: date.toDateString() === new Date().toDateString() ? "Hoje" : "Anteriores",
+    category,
+    action: category === "Negociações" ? "Ver negociação" : category === "Pedidos" ? "Acompanhar pedido" : "Ver ofertas",
+    link,
+    unread: !notification.lida,
+    urgent: !notification.lida,
+  };
+}
 
 const colors: Record<Category, string> = {
   "Negociações": "bg-[#fff1d9] text-[#b87a15]",
@@ -50,12 +65,17 @@ function NoticeIcon({ category }: { category: Category }) {
 }
 
 export default function ProducerNotificationsPage() {
-  const [notices, setNotices] = useState<Notice[]>(sampleNotices);
+  const profileName = useAuthStore((state) => state.user?.name ?? "Produtor");
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [error, setError] = useState("");
   const [filter, setFilter] = useState("Todas");
-  const [menuId, setMenuId] = useState<number | null>(null);
-  const [emailSummary, setEmailSummary] = useState(true);
-  const [newOffers, setNewOffers] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [menuId, setMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    notificationService.list()
+      .then((items) => setNotices(items.map(toNotice)))
+      .catch((cause) => setError(cause instanceof Error ? cause.message : "Não foi possível carregar as notificações."));
+  }, []);
 
   const unreadCount = notices.filter((notice) => notice.unread).length;
   const categories = ["Todas", "Não lidas", "Negociações", "Pedidos", "Vendas", "Oportunidades"];
@@ -66,24 +86,22 @@ export default function ProducerNotificationsPage() {
     return notice.category === filter;
   }), [notices, filter]);
 
-  function setReadStatus(id: number, unread: boolean) {
-    setNotices((current) => current.map((notice) => notice.id === id ? { ...notice, unread } : notice));
+  async function setReadStatus(id: string, unread: boolean) {
+    if (unread) return;
+    await notificationService.markRead(id);
+    setNotices((current) => current.map((notice) => notice.id === id ? { ...notice, unread: false } : notice));
     setMenuId(null);
   }
 
-  function markAllRead() {
+  async function markAllRead() {
+    await notificationService.markAllRead();
     setNotices((current) => current.map((notice) => ({ ...notice, unread: false })));
-    setMenuId(null);
-  }
-
-  function removeNotice(id: number) {
-    setNotices((current) => current.filter((notice) => notice.id !== id));
     setMenuId(null);
   }
 
   return (
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
-      <ProfileNavbar profileName="João Ribeiro" role="PRODUTOR" links={navigation} notificationCount={unreadCount} notificationsHref="/produtor/notificacoes" />
+      <ProfileNavbar profileName={profileName} role="PRODUTOR" links={navigation} notificationCount={unreadCount} notificationsHref="/produtor/notificacoes" />
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
         <p className="mb-1 text-xs font-bold uppercase text-[#2d6922]">Área do produtor • Central de atualizações</p>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -113,33 +131,16 @@ export default function ProducerNotificationsPage() {
               })}
             </section>
 
-            <section className="rounded-2xl bg-[#edf3e9] p-4">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-extrabold">Como quer receber?</h2>
-                <button type="button" onClick={() => setShowSettings((current) => !current)} aria-label="Configurar alertas" aria-expanded={showSettings} className="rounded-lg p-1 hover:bg-white/70"><Settings2 size={17} /></button>
-              </div>
-              <p className="mb-4 text-xs leading-relaxed text-[#78877d]">Preferências visuais desta demonstração.</p>
-              <label className="mb-3 flex cursor-pointer items-center justify-between gap-3 text-xs">
-                <span className="flex items-center gap-2"><Mail size={16} className="text-[#27824a]" /> Resumo por e-mail</span>
-                <input type="checkbox" checked={emailSummary} onChange={(e) => setEmailSummary(e.target.checked)} className="h-4 w-4 accent-[#27824a]" />
-              </label>
-              <label className="flex cursor-pointer items-center justify-between gap-3 text-xs">
-                <span className="flex items-center gap-2"><TrendingUp size={16} className="text-[#27824a]" /> Novas ofertas</span>
-                <input type="checkbox" checked={newOffers} onChange={(e) => setNewOffers(e.target.checked)} className="h-4 w-4 accent-[#27824a]" />
-              </label>
-              {showSettings && <p className="mt-3 rounded-lg bg-white/70 p-2 text-xs text-[#617165]">A configuração real de envios será ligada à API em outra etapa.</p>}
-            </section>
           </aside>
 
           <div className="space-y-4">
-            {(["Hoje", "Ontem"] as const).map((group) => {
+            {(["Hoje", "Anteriores"] as const).map((group) => {
               const items = filtered.filter((notice) => notice.group === group);
               if (!items.length) return null;
               return (
                 <section key={group} className="overflow-visible rounded-2xl border border-[#dfe6dd] bg-white shadow-sm">
                   <div className="flex items-center justify-between border-b border-[#e5e9e3] px-5 py-4">
                     <div className="flex items-center gap-2"><h2 className="text-base font-extrabold">{group}</h2>{group === "Hoje" && items.some((n) => n.unread) && <span className="rounded-full bg-[#e3f5e9] px-2 py-1 text-[10px] font-bold text-[#26784c]">{items.filter((n) => n.unread).length} NÃO LIDAS</span>}</div>
-                    {group === "Hoje" && <button type="button" onClick={() => setShowSettings((current) => !current)} className="text-xs font-semibold text-[#2d6922]">Configurar alertas</button>}
                   </div>
                   <div className="divide-y divide-[#e5e9e3]">
                     {items.map((notice) => (
@@ -168,7 +169,6 @@ export default function ProducerNotificationsPage() {
                               <Check size={15} />
                               {notice.unread ? "Marcar como lida" : "Marcar como não lida"}
                             </button>
-                            <button type="button" onClick={() => removeNotice(notice.id)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-[#bf4440] hover:bg-red-50"><X size={15} /> Remover aviso</button>
                           </div>}
                         </div>
                       </article>
@@ -177,8 +177,8 @@ export default function ProducerNotificationsPage() {
                 </section>
               );
             })}
-            {filtered.length === 0 && <section className="rounded-2xl border border-[#dfe6dd] bg-white p-12 text-center"><Users size={28} className="mx-auto text-[#9ca99b]" /><h2 className="mt-3 font-bold">Nenhuma notificação encontrada</h2><p className="mt-1 text-sm text-[#87938a]">Não há avisos nesta categoria.</p></section>}
-            <p className="text-center text-xs text-[#87938a]">Dados demonstrativos: alterações de leitura e preferências não são salvas no servidor.</p>
+            {error && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+            {filtered.length === 0 && !error && <section className="rounded-2xl border border-[#dfe6dd] bg-white p-12 text-center"><Users size={28} className="mx-auto text-[#9ca99b]" /><h2 className="mt-3 font-bold">Nenhuma notificação encontrada</h2><p className="mt-1 text-sm text-[#87938a]">Não há avisos nesta categoria.</p></section>}
           </div>
         </div>
       </main>

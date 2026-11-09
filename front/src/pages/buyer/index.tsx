@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
@@ -14,7 +13,8 @@ import {
 } from "lucide-react";
 
 import ProfileNavbar from "../../components/ProfileNavbar";
-import { offerService, type BackendOffer } from "../../services/offerService";
+import { useOfferStore, selectMarketplaceOffers, selectMarketplaceLoading } from "../../stores/offerStore";
+import type { BackendOffer } from "../../services/offerService";
 
 import heroImage from "../../assets/hero.jpg";
 import sojaImage from "../../assets/offer-soja.jpg";
@@ -133,10 +133,15 @@ function fromBackend(offer: BackendOffer): Offer {
 }
 
 export default function BuyerPage() {
-  const [remoteOffers, setRemoteOffers] = useState<Offer[]>([]);
+  const backendOffers = useOfferStore(selectMarketplaceOffers);
+  const isLoading = useOfferStore(selectMarketplaceLoading);
+  const fetchMarketplace = useOfferStore((s) => s.fetchMarketplace);
+
   useEffect(() => {
-    offerService.listActive().then((list) => setRemoteOffers(list.map(fromBackend))).catch(() => setRemoteOffers([]));
-  }, []);
+    void fetchMarketplace();
+  }, [fetchMarketplace]);
+
+  const remoteOffers = useMemo(() => backendOffers.map(fromBackend), [backendOffers]);
 
   const [category, setCategory] =
     useState<CategoryFilter>("Todas as categorias");
@@ -191,7 +196,7 @@ export default function BuyerPage() {
       className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]"
     >
       <ProfileNavbar
-        profileName="João Ribeiro"
+        profileName="Comprador"
         role="COMPRADOR"
         notificationCount={3}
         notificationsHref="/comprador/notificacoes"
@@ -203,10 +208,6 @@ export default function BuyerPage() {
           {
             label: "Meus pedidos",
             href: "/comprador/pedidos",
-          },
-          {
-            label: "Negociações",
-            href: "/comprador/negociacao/1",
           },
         ]}
       />
@@ -510,7 +511,7 @@ export default function BuyerPage() {
             </div>
 
             <span className="text-xs font-bold text-[#2f681f]">
-              {filteredOffers.length} ofertas exibidas
+              {isLoading ? "Carregando..." : `${filteredOffers.length} ofertas exibidas`}
               <ArrowRight
                 size={14}
                 className="ml-1 inline"

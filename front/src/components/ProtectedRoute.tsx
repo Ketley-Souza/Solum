@@ -15,6 +15,7 @@ import { useAuthStore } from "../stores/authStore";
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
   const expiresAt = useAuthStore((s) => s.expiresAt);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const location = useLocation();
 
@@ -29,9 +30,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
   }, [isExpired, clearAuth]);
 
-  // ⚠️  DEV ONLY — bypassa autenticação em desenvolvimento.
-  //    Removido automaticamente pelo Vite no build de produção.
-  if (import.meta.env.DEV) return <>{children}</>;
+  if (!hasHydrated) {
+    return null;
+  }
 
   if (!token || isExpired) {
     return (

@@ -8,6 +8,7 @@ interface BackendLoginResponse {
     id: string;
     nome: string;
     email: string;
+    whatsapp?: string;
     perfil: string; // ex.: "PRODUTOR"
   };
 }
@@ -16,7 +17,7 @@ interface BackendLoginResponse {
 export interface AuthResponse {
   token: string;
   profile: Profile;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; whatsapp?: string };
 }
 
 /** Perfil do front (lowercase) → enum do back (UPPERCASE) */
@@ -30,12 +31,17 @@ async function login(payload: LoginPayload): Promise<AuthResponse> {
   // Back espera: { email, senha } — sem perfil (já está na conta)
   const raw = await requestJson<BackendLoginResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email: payload.email, senha: payload.password }),
+    body: JSON.stringify({ email: payload.email.trim().toLowerCase(), senha: payload.password }),
   });
+  const profile = raw.usuario.perfil.toLowerCase() as Profile;
+  if (profile !== payload.profile) {
+    throw new Error(`Este e-mail pertence a uma conta de ${profile}. Selecione esse perfil para entrar.`);
+  }
+
   return {
     token: raw.token,
-    profile: raw.usuario.perfil.toLowerCase() as Profile,
-    user: { id: raw.usuario.id, name: raw.usuario.nome, email: raw.usuario.email },
+    profile,
+    user: { id: raw.usuario.id, name: raw.usuario.nome, email: raw.usuario.email, whatsapp: raw.usuario.whatsapp },
   };
 }
 
@@ -45,16 +51,15 @@ async function cadastro(payload: CadastroPayload): Promise<AuthResponse> {
     method: "POST",
     body: JSON.stringify({
       nome: payload.nome,
-      documento: payload.documento,
-      email: payload.email,
+      documento: payload.documento.replace(/\D/g, ""),
+      email: payload.email.trim().toLowerCase(),
       whatsapp: payload.whatsapp,
       senha: payload.password,
       perfil: PERFIL_MAP[payload.profile],
     }),
   });
   // Back não retorna token no cadastro → login automático pós-registro
-  return login({ profile: payload.profile, email: payload.email, password: payload.password });
+  return login({ profile: payload.profile, email: payload.email.trim(), password: payload.password });
 }
 
 export const authService = { login, cadastro };
-

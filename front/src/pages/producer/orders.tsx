@@ -4,7 +4,10 @@ import {
   MapPin, Package, Search, ShieldCheck, Truck,
 } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
-import { orderService, type BackendOrder, type OrderStatus } from "../../services/orderService";
+import { useAuthStore } from "../../stores/authStore";
+import type { BackendOrder, OrderStatus } from "../../services/orderService";
+import { proposalService } from "../../services/proposalService";
+import { selectOrders, selectOrdersError, selectOrdersLoading, useOrderStore } from "../../stores/orderStore";
 
 type Stage = "Negociando" | "Fechado" | "Em transporte" | "Entregue";
 type Order = {
@@ -12,6 +15,7 @@ type Order = {
   product: string;
   buyer: string;
   quantity: number;
+  unit: string;
   weightTons: number;
   price: number;
   stage: Stage;
@@ -19,10 +23,17 @@ type Order = {
   farm: string;
   destination: string;
   deliveryPoint: string;
-  carrier?: string;
-  driver?: string;
-  vehicle?: string;
   lastUpdate: string;
+  freightStatus?: string;
+  freightCode?: string;
+  carrier?: string;
+  vehicle?: string;
+  proposalId?: string;
+  proposalStatus?: string;
+  proposedPrice?: number;
+  counterPrice?: number;
+  counterMessage?: string | null;
+  counterExpiresAt?: string;
 };
 
 const STAGE_BY_STATUS: Record<OrderStatus, Stage> = {
@@ -38,14 +49,29 @@ function toOrder(pedido: BackendOrder): Order {
     product: pedido.oferta.produto,
     buyer: pedido.comprador?.nome ?? "—",
     quantity: Number(pedido.quantidade_final),
+    unit: pedido.oferta.unidade,
     weightTons: Number(pedido.frete?.peso_toneladas ?? 0),
     price: Number(pedido.preco_final) * Number(pedido.quantidade_final),
     stage: STAGE_BY_STATUS[pedido.status],
     origin: pedido.oferta.localizacao,
     farm: pedido.oferta.produtor?.nome ?? "",
     destination: pedido.endereco_entrega,
-    deliveryPoint: "Endereço de entrega",
+    deliveryPoint: pedido.frete?.endereco_destino ?? pedido.endereco_entrega,
     lastUpdate: new Date(pedido.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }),
+    freightStatus: pedido.frete?.status,
+    freightCode: pedido.frete?.codigo,
+    carrier: pedido.frete?.transportador?.nome,
+    vehicle: pedido.frete?.veiculo
+      ? `${pedido.frete.veiculo.tipo_veiculo} · ${Number(pedido.frete.veiculo.capacidade_toneladas)} t`
+      : undefined,
+    proposalId: pedido.proposta?.id,
+    proposalStatus: pedido.proposta?.status,
+    proposedPrice: pedido.proposta ? Number(pedido.proposta.preco) : undefined,
+    counterPrice: pedido.proposta?.contrapropostas[0]
+      ? Number(pedido.proposta.contrapropostas[0].preco_contraproposta)
+      : undefined,
+    counterMessage: pedido.proposta?.contrapropostas[0]?.mensagem,
+    counterExpiresAt: pedido.proposta?.contrapropostas[0]?.expira_em,
   };
 }
 
@@ -68,14 +94,23 @@ function stageIndex(stage: Stage) {
 }
 
 export default function ProducerOrdersPage() {
+  const profileName = useAuthStore((state) => state.user?.name ?? "Produtor");
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState<"Todas" | "Em andamento" | "Concluídos">("Todas");
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [counterPrice, setCounterPrice] = useState("");
+  const [counterMessage, setCounterMessage] = useState("");
+  const [counterError, setCounterError] = useState("");
+  const [counterSaving, setCounterSaving] = useState(false);
+  const backendOrders = useOrderStore(selectOrders);
+  const loading = useOrderStore(selectOrdersLoading);
+  const error = useOrderStore(selectOrdersError);
+  const fetchOrders = useOrderStore((state) => state.fetchOrders);
+  const orders = useMemo(() => backendOrders.map(toOrder), [backendOrders]);
   useEffect(() => {
-    orderService.list().then((pedidos) => setOrders(pedidos.map(toOrder))).catch(() => setOrders([]));
-  }, []);
+    void fetchOrders();
+  }, [fetchOrders]);
   const underway = orders.filter((order) => order.stage !== "Entregue").length;
   const completed = orders.filter((order) => order.stage === "Entregue").length;
   const visible = useMemo(() => orders.filter((order) => {
@@ -92,17 +127,45 @@ export default function ProducerOrdersPage() {
   }
   const currentSelection = visible.find((o) => o.id === selectedId) ?? visible[0] ?? null;
   const display = currentSelection;
+  const canCounter = display?.proposalId && display.proposalStatus === "PENDENTE";
+
+  async function sendCounterproposal() {
+    if (!display?.proposalId || !canCounter) return;
+    const price = Number(counterPrice.replace(",", "."));
+    if (!Number.isFinite(price) || price <= 0) {
+      setCounterError("Informe um preço válido maior que zero.");
+      return;
+    }
+    setCounterSaving(true);
+    setCounterError("");
+    try {
+      await proposalService.counter(display.proposalId, {
+        preco: price,
+        quantidade: display.quantity,
+        mensagem: counterMessage.trim() || undefined,
+      });
+      await fetchOrders(true);
+      setCounterPrice("");
+      setCounterMessage("");
+    } catch (cause) {
+      setCounterError(cause instanceof Error ? cause.message : "Não foi possível enviar a contraproposta.");
+    } finally {
+      setCounterSaving(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
       <ProfileNavbar
-        profileName="João Ribeiro"
+        profileName={profileName}
         role="PRODUTOR"
         links={links}
         notificationCount={2}
         notificationsHref="/produtor/notificacoes"
       />
       <main className="mx-auto max-w-7xl px-5 py-7 md:px-10">
+        {error && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {loading && <p className="mb-4 text-sm text-[#78877d]">Carregando pedidos...</p>}
         <p className="mb-1 text-xs font-bold uppercase text-[#2d6922]">Área do produtor</p>
         <h1 className="text-3xl font-extrabold tracking-tight">Pedidos e logística</h1>
         <p className="mt-2 text-sm text-[#78877d]">Acompanhe cada venda do fechamento à confirmação da entrega.</p>
@@ -127,7 +190,7 @@ export default function ProducerOrdersPage() {
               <button type="button" key={order.id} onClick={() => setSelectedId(order.id)} aria-pressed={display?.id === order.id} className={`w-full border-b border-[#e5e9e3] p-4 text-left transition last:border-0 hover:bg-[#f6f9f3] ${display?.id === order.id ? "border-l-2 border-l-[#2d6922] bg-[#f0f5eb]" : ""}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] font-extrabold text-[#2d6922]">{order.id}</span><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${stageColors[order.stage]}`}>{order.stage}</span></div>
                 <h3 className="mt-2 text-sm font-extrabold">{order.product}</h3>
-                <p className="mt-1 text-xs text-[#78877d]">{order.buyer} · {order.quantity} sacas</p>
+                <p className="mt-1 text-xs text-[#78877d]">{order.buyer} · {order.quantity} {order.unit}</p>
                 <p className="mt-2 text-xs font-bold">{order.stage === "Negociando" ? "Em negociação" : currency(order.price)}</p>
               </button>
             ))}
@@ -144,14 +207,50 @@ export default function ProducerOrdersPage() {
               </ol>
             </section>
 
+            {display.proposalId && (
+              <section className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold">Condições da negociação</h3>
+                    <p className="mt-1 text-xs text-[#78877d]">
+                      Proposta do comprador: {currency(display.proposedPrice ?? 0)} por unidade
+                      {display.counterPrice ? ` • Última contraproposta: ${currency(display.counterPrice)}` : ""}
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${display.proposalStatus === "PENDENTE" ? "bg-[#fff0d7] text-[#a6680a]" : "bg-[#edf1e9] text-[#65766a]"}`}>
+                    {display.proposalStatus === "PENDENTE" ? "Aguardando resposta do produtor" : display.proposalStatus}
+                  </span>
+                </div>
+                {display.counterMessage && <p className="mt-3 rounded-lg bg-[#f7f8f3] p-3 text-xs text-[#66776b]">Mensagem anterior: {display.counterMessage}</p>}
+                {canCounter ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                    <label className="text-xs font-semibold">Novo preço
+                      <input type="number" min="0.01" step="0.01" value={counterPrice} onChange={(event) => setCounterPrice(event.target.value)} className="mt-1 w-full rounded-lg border border-[#dfe5dc] px-3 py-2 text-sm" placeholder="Ex.: 1250,00" />
+                    </label>
+                    <label className="text-xs font-semibold">Mensagem
+                      <input value={counterMessage} onChange={(event) => setCounterMessage(event.target.value)} className="mt-1 w-full rounded-lg border border-[#dfe5dc] px-3 py-2 text-sm" placeholder="Condição para o comprador" />
+                    </label>
+                    <button type="button" disabled={counterSaving} onClick={sendCounterproposal} className="self-end rounded-lg bg-[#2d6922] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                      {counterSaving ? "Enviando..." : "Enviar contraproposta"}
+                    </button>
+                  </div>
+                ) : display.proposalStatus === "CONTRAPROPOSTA" ? (
+                  <p className="mt-4 rounded-lg bg-[#fff0d7] p-3 text-xs text-[#8a5c13]">Contraproposta enviada. O pedido aguarda a decisão do comprador.</p>
+                ) : (
+                  <p className="mt-4 text-xs text-[#78877d]">Esta negociação já foi encerrada e não permite novas alterações.</p>
+                )}
+                {counterError && <p role="alert" className="mt-3 text-xs text-red-600">{counterError}</p>}
+              </section>
+            )}
+
             <div className="grid gap-3 md:grid-cols-2">
               <section className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-extrabold"><Building2 size={17} className="text-[#2d6922]"/> Comprador e carga</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm"><div><p className="mb-1 text-[10px] uppercase text-[#87938a]">Comprador</p><strong className="text-xs">{display.buyer}</strong></div><div><p className="mb-1 text-[10px] uppercase text-[#87938a]">Pedido</p><strong className="text-xs">{display.id}</strong></div><div><p className="mb-1 text-[10px] uppercase text-[#87938a]">Carga</p><strong className="text-xs">{display.quantity} sacas · {display.weightTons.toLocaleString("pt-BR")} t</strong></div><div><p className="mb-1 text-[10px] uppercase text-[#87938a]">Valor</p><strong className="text-xs">{display.stage === "Negociando" ? "Em negociação" : currency(display.price)}</strong></div></div>
+                <div className="grid grid-cols-2 gap-4 text-sm"><div><p className="mb-1 text-[10px] uppercase text-[#87938a]">Comprador</p><strong className="text-xs">{display.buyer}</strong></div><div><p className="mb-1 text-[10px] uppercase text-[#87938a]">Pedido</p><strong className="text-xs">{display.id}</strong></div><div><p className="mb-1 text-[10px] uppercase text-[#87938a]">Carga</p><strong className="text-xs">{display.quantity} {display.unit} · {display.weightTons.toLocaleString("pt-BR")} t</strong></div><div><p className="mb-1 text-[10px] uppercase text-[#87938a]">Valor</p><strong className="text-xs">{display.stage === "Negociando" ? "Em negociação" : currency(display.price)}</strong></div></div>
               </section>
               <section className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm">
                 <h3 className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm font-extrabold"><span className="flex items-center gap-2"><Truck size={17} className="text-[#2d6922]"/> Transportador</span><span className={`rounded-full px-2 py-1 text-[10px] ${display.carrier ? "bg-[#e3f5e9] text-[#23804b]" : "bg-[#edf1e9] text-[#65766a]"}`}>{display.carrier ? "Atribuído" : "Não definido"}</span></h3>
-                {display.carrier ? <div className="space-y-3 text-xs"><p><span className="block text-[10px] uppercase text-[#87938a]">Empresa</span><strong>{display.carrier}</strong></p><div className="grid grid-cols-2 gap-2"><p><span className="block text-[10px] uppercase text-[#87938a]">Motorista</span><strong>{display.driver}</strong></p><p><span className="block text-[10px] uppercase text-[#87938a]">Veículo</span><strong>{display.vehicle}</strong></p></div></div> : <div className="flex items-start gap-2 rounded-lg bg-[#f7f8f3] p-3 text-xs text-[#66776b]"><Clock3 size={16} className="shrink-0"/> Atribuição de frete ainda não registrada. A solicitação real será gerada pelo back-end após o fechamento da venda.</div>}
+                {display.carrier ? <div className="space-y-3 text-xs"><p><span className="block text-[10px] uppercase text-[#87938a]">Transportador</span><strong>{display.carrier}</strong></p><div className="grid grid-cols-2 gap-2"><p><span className="block text-[10px] uppercase text-[#87938a]">Frete</span><strong>{display.freightCode} · {display.freightStatus}</strong></p><p><span className="block text-[10px] uppercase text-[#87938a]">Veículo</span><strong>{display.vehicle ?? "Não informado"}</strong></p></div></div> : <div className="flex items-start gap-2 rounded-lg bg-[#f7f8f3] p-3 text-xs text-[#66776b]"><Clock3 size={16} className="shrink-0"/> {display.freightStatus ? `Frete ${display.freightStatus.toLowerCase()}. Transportador ainda não atribuído.` : "O frete será criado quando a negociação for aceita."}</div>}
               </section>
             </div>
 

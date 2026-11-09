@@ -7,10 +7,12 @@ import {
   aceitarFreteSchema,
   alterarStatusOfertaSchema,
   alterarStatusUsuarioSchema,
+  atualizarPerfilSchema,
   cadastroUsuarioSchema,
   compraDiretaSchema,
   criarContraPropostaSchema,
   criarOfertaSchema,
+  atualizarOfertaSchema,
   criarPropostaSchema,
   criarVeiculoSchema,
   filtroFretesQuerySchema,
@@ -21,7 +23,9 @@ import {
 import {
   alterarStatusUsuario,
   autenticarUsuario,
+  atualizarPerfilUsuario,
   cadastrarUsuario,
+  obterPerfilUsuario,
 } from '../services/usuario.service.js'
 import {
   cadastrarVeiculo,
@@ -33,6 +37,7 @@ import {
   criarOferta,
   listarOfertas,
   removerOfertaPorAdmin,
+  atualizarOferta,
 } from '../services/oferta.service.js'
 import {
   aceitarContraProposta,
@@ -44,6 +49,11 @@ import {
   recusarProposta,
 } from '../services/proposta.service.js'
 import { comprarDireto, listarPedidos } from '../services/pedido.service.js'
+import {
+  listarNotificacoes,
+  marcarNotificacaoComoLida,
+  marcarTodasNotificacoesComoLidas,
+} from '../services/notificacao.service.js'
 import {
   aceitarFrete,
   confirmarEntrega,
@@ -74,6 +84,33 @@ apiRouter.post('/auth/login', async (req, res) => {
   res.status(200).json(resultado)
 })
 
+apiRouter.get('/usuarios/me', autenticar, async (req, res) => {
+  const usuario = await obterPerfilUsuario(obterAtor(req.usuario))
+  res.status(200).json(usuario)
+})
+
+apiRouter.patch('/usuarios/me', autenticar, async (req, res) => {
+  const dados = atualizarPerfilSchema.parse(req.body)
+  const usuario = await atualizarPerfilUsuario(obterAtor(req.usuario), dados)
+  res.status(200).json(usuario)
+})
+
+apiRouter.get('/notificacoes', autenticar, async (req, res) => {
+  const notificacoes = await listarNotificacoes(obterAtor(req.usuario))
+  res.status(200).json(notificacoes)
+})
+
+apiRouter.patch('/notificacoes/todas/lidas', autenticar, async (req, res) => {
+  await marcarTodasNotificacoesComoLidas(obterAtor(req.usuario))
+  res.status(204).send()
+})
+
+apiRouter.patch('/notificacoes/:id/lida', autenticar, async (req, res) => {
+  const { id } = parametroIdSchema.parse(req.params)
+  await marcarNotificacaoComoLida(obterAtor(req.usuario), id)
+  res.status(204).send()
+})
+
 apiRouter.patch(
   '/usuarios/:id/status',
   autenticar,
@@ -83,6 +120,18 @@ apiRouter.patch(
     const { status } = alterarStatusUsuarioSchema.parse(req.body)
     const usuario = await alterarStatusUsuario(obterAtor(req.usuario), id, status)
     res.status(200).json(usuario)
+  },
+)
+
+apiRouter.patch(
+  '/ofertas/:id',
+  autenticar,
+  autorizar(PerfilUsuario.PRODUTOR),
+  async (req, res) => {
+    const { id } = parametroIdSchema.parse(req.params)
+    const dados = atualizarOfertaSchema.parse(req.body)
+    const oferta = await atualizarOferta(obterAtor(req.usuario), id, dados)
+    res.status(200).json(oferta)
   },
 )
 

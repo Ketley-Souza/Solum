@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   CalendarDays,
   MapPin,
@@ -9,11 +10,16 @@ import {
 } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
 import {
-  transportService,
   type Freight,
-  type Vehicle,
 } from "../../services/transportService";
 import { useAuthStore } from "../../stores/authStore";
+import {
+  selectAvailableFreights,
+  selectFreightsError,
+  selectFreightsLoading,
+  selectVehicles,
+  useFreightStore,
+} from "../../stores/freightStore";
 
 const links = [
   { label: "Visão geral", href: "/transportador" },
@@ -41,54 +47,30 @@ function date(value: string) {
 
 export default function AvailableFreightsPage() {
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
-  const isDemo = token === "dev";
 
-  const [freights, setFreights] = useState<Freight[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const freights = useFreightStore(useShallow(selectAvailableFreights));
+  const vehicles = useFreightStore(selectVehicles);
+  const loading = useFreightStore(selectFreightsLoading);
+  const storeError = useFreightStore(selectFreightsError);
+  const fetchFreights = useFreightStore((state) => state.fetchFreights);
+  const fetchVehicles = useFreightStore((state) => state.fetchVehicles);
+  const acceptFreightFromStore = useFreightStore((state) => state.acceptFreight);
   const [search, setSearch] = useState("");
   const [cargo, setCargo] = useState("Todas as cargas");
   const [selected, setSelected] = useState<Freight | null>(null);
   const [vehicleId, setVehicleId] = useState("");
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const displayError = error || storeError;
 
-  async function load() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const [freightData, vehicleData] = await Promise.all([
-        transportService.listFreights("DISPONIVEL"),
-        transportService.listVehicles(),
-      ]);
-
-      setFreights(
-        freightData.filter(
-          (freight) =>
-            freight.status === "DISPONIVEL" &&
-            !freight.transportador_id,
-        ),
-      );
-      setVehicles(vehicleData);
-    } catch (err) {
-      setFreights([]);
-      setVehicles([]);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Não foi possível carregar os fretes.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  const load = useCallback(async () => {
+    await Promise.all([fetchFreights("DISPONIVEL"), fetchVehicles()]);
+  }, [fetchFreights, fetchVehicles]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const categories = useMemo(
     () =>
@@ -140,7 +122,7 @@ export default function AvailableFreightsPage() {
     setMessage("");
 
     try {
-      await transportService.acceptFreight(selected.id, vehicleId);
+      await acceptFreightFromStore(selected.id, vehicleId);
 
       setSelected(null);
       setVehicleId("");
@@ -167,12 +149,6 @@ export default function AvailableFreightsPage() {
       />
 
       <main className="mx-auto max-w-[1440px] px-5 py-8 md:px-10 lg:px-12">
-        {isDemo && (
-          <p className="mb-5 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
-            Modo de demonstração — os fretes desta tela são fictícios.
-          </p>
-        )}
-
         <p className="text-sm font-extrabold uppercase tracking-wide text-[#548047]">
           Oportunidades de transporte
         </p>
@@ -227,12 +203,12 @@ export default function AvailableFreightsPage() {
           </button>
         </div>
 
-        {error && (
+        {displayError && (
           <p
             role="alert"
             className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700"
           >
-            {error}
+            {displayError}
           </p>
         )}
 
@@ -394,9 +370,9 @@ export default function AvailableFreightsPage() {
               </p>
             )}
 
-            {error && (
+            {displayError && (
               <p className="mt-3 text-sm text-red-700">
-                {error}
+                {displayError}
               </p>
             )}
 
@@ -427,6 +403,7 @@ const vehicleTypes = ["VUC", "TOCO", "TRUCK", "CARRETA", "BITREM", "RODOTREM"];
 
 /** Cadastro de veiculo na frota do transportador (grava no banco). */
 function VehicleForm({ onCreated }: { onCreated: () => void }) {
+  const createVehicleFromStore = useFreightStore((state) => state.createVehicle);
   const [type, setType] = useState("TRUCK");
   const [capacity, setCapacity] = useState("");
   const [saving, setSaving] = useState(false);
@@ -436,7 +413,7 @@ function VehicleForm({ onCreated }: { onCreated: () => void }) {
     setSaving(true);
     setFeedback("");
     try {
-      await transportService.createVehicle(type, Number(capacity.replace(",", ".")));
+      await createVehicleFromStore(type, Number(capacity.replace(",", ".")));
       setCapacity("");
       setFeedback("Ve\u00edculo cadastrado.");
       onCreated();

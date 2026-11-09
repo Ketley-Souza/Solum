@@ -1,9 +1,12 @@
-
+import { useEffect, useState } from "react";
+import { ArrowRight, Handshake, Package, Wallet } from "lucide-react";
+import { Link } from "react-router-dom";
 import ProfileNavbar from "../../components/ProfileNavbar";
-import { Package, Handshake, Wallet, Plus, ArrowRight } from "lucide-react";
-
-import cafeImage from "../../assets/offer-cafe.png";
-import milhoImage from "../../assets/offer-milho.jpg";
+import { useAuthStore } from "../../stores/authStore";
+import { selectMyOffers, useOfferStore } from "../../stores/offerStore";
+import { selectOrders, useOrderStore } from "../../stores/orderStore";
+import { proposalService, type BackendProposal } from "../../services/proposalService";
+import { notificationService } from "../../services/notificationService";
 
 const navigation = [
   { label: "Visão geral", href: "/produtor" },
@@ -12,179 +15,118 @@ const navigation = [
   { label: "Pedidos", href: "/produtor/pedidos" },
 ];
 
-const indicators = [
-  {
-    title: "Ofertas ativas",
-    value: "4",
-    detail: "+1 esta semana",
-    icon: Package,
-  },
-  {
-    title: "Negociações em andamento",
-    value: "3",
-    detail: "2 aguardam você",
-    icon: Handshake,
-  },
-  {
-    title: "Volume negociado em setembro",
-    value: "R$ 45K",
-    detail: "+18% no mês",
-    icon: Wallet,
-  },
-];
+const currency = (value: number) => value.toLocaleString("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 
 export default function ProducerPage() {
+  const user = useAuthStore((state) => state.user);
+  const offers = useOfferStore(selectMyOffers);
+  const fetchOffers = useOfferStore((state) => state.fetchMyOffers);
+  const orders = useOrderStore(selectOrders);
+  const fetchOrders = useOrderStore((state) => state.fetchOrders);
+  const [proposals, setProposals] = useState<BackendProposal[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  useEffect(() => {
+    void fetchOffers();
+    void fetchOrders();
+    proposalService.list().then(setProposals).catch(() => setProposals([]));
+    notificationService.list()
+      .then((items) => setUnreadNotifications(items.filter((item) => !item.lida).length))
+      .catch(() => setUnreadNotifications(0));
+  }, [fetchOffers, fetchOrders, setProposals, setUnreadNotifications]);
+
+  const activeOffers = offers.filter((offer) => offer.status === "ATIVA").length;
+  const openProposals = proposals.filter((proposal) =>
+    proposal.status === "PENDENTE" || proposal.status === "CONTRAPROPOSTA"
+  );
+  const negotiatedVolume = orders
+    .filter((order) => order.status !== "ABERTO" && order.status !== "NEGOCIANDO")
+    .reduce((total, order) => total + Number(order.preco_final) * Number(order.quantidade_final), 0);
+  const recentOffers = offers.slice(0, 3);
+  const latestProposal = openProposals[0];
+  const firstName = user?.name?.split(" ")[0] ?? "produtor";
+
   return (
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
       <ProfileNavbar
-        profileName="João Ribeiro"
+        profileName={user?.name ?? "Produtor"}
         role="PRODUTOR"
         links={navigation}
-        notificationCount={2}
+        notificationCount={unreadNotifications}
         notificationsHref="/produtor/notificacoes"
       />
-
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
-        {/* Saudação */}
-        <section className="mb-7 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="mb-2 text-xs font-bold uppercase text-[#2d6922]">
-              Área do produtor
-            </p>
-            <h1 className="text-3xl font-extrabold tracking-tight">
-              Bom dia, João!
-            </h1>
-            <p className="mt-2 text-sm text-[#78877d]">
-              Fazenda Boa Vista • Patos de Minas, MG
-            </p>
-          </div>
+        <section className="mb-7">
+          <p className="mb-2 text-xs font-bold uppercase text-[#2d6922]">Área do produtor</p>
+          <h1 className="text-3xl font-extrabold tracking-tight">Olá, {firstName}!</h1>
+          <p className="mt-2 text-sm text-[#78877d]">Acompanhe seus lotes, negociações e pedidos em tempo real.</p>
         </section>
 
-        {/* Indicadores */}
         <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {indicators.map((item) => {
+          {[
+            { title: "Ofertas ativas", value: String(activeOffers), detail: `${offers.length} no total`, icon: Package },
+            { title: "Negociações em andamento", value: String(openProposals.length), detail: `${proposals.filter((p) => p.status === "PENDENTE").length} aguardam você`, icon: Handshake },
+            { title: "Volume negociado", value: currency(negotiatedVolume), detail: `${orders.length} pedidos`, icon: Wallet },
+          ].map((item) => {
             const Icon = item.icon;
-
             return (
-              <div
-                key={item.title}
-                className="rounded-2xl border border-[#e0e6dd] bg-white p-5 shadow-sm"
-              >
+              <div key={item.title} className="rounded-2xl border border-[#e0e6dd] bg-white p-5 shadow-sm">
                 <div className="mb-5 flex items-center gap-3">
-                  <span className="rounded-xl bg-[#edf5e8] p-3 text-[#2d6922]">
-                    <Icon size={19} />
-                  </span>
-                  <span className="rounded-full bg-[#e5f5e9] px-3 py-1 text-xs font-bold text-[#287a48]">
-                    {item.detail}
-                  </span>
+                  <span className="rounded-xl bg-[#edf5e8] p-3 text-[#2d6922]"><Icon size={19} /></span>
+                  <span className="rounded-full bg-[#e5f5e9] px-3 py-1 text-xs font-bold text-[#287a48]">{item.detail}</span>
                 </div>
                 <h2 className="text-3xl font-extrabold">{item.value}</h2>
-                <p className="mt-2 text-sm font-semibold text-[#708077]">
-                  {item.title}
-                </p>
+                <p className="mt-2 text-sm font-semibold text-[#708077]">{item.title}</p>
               </div>
             );
           })}
         </section>
 
-        {/* Ofertas e propostas */}
         <section className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
-          <div
-            id="ofertas"
-            className="rounded-2xl border border-[#e0e6dd] bg-white p-5 shadow-sm lg:col-span-2"
-          >
+          <div className="rounded-2xl border border-[#e0e6dd] bg-white p-5 shadow-sm lg:col-span-2">
             <div className="mb-5 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-extrabold">Minhas Ofertas</h2>
-              <span className="text-xs font-semibold text-[#2d6922]">
-                Ofertas recentes
-              </span>
+              <h2 className="text-lg font-extrabold">Minhas ofertas</h2>
+              <Link to="/produtor/ofertas" className="text-xs font-semibold text-[#2d6922]">Ver todas</Link>
             </div>
-
-            <div className="space-y-3">
-              <article className="flex flex-wrap items-center gap-4 rounded-xl bg-[#f7f8f5] p-3">
-                <img
-                  src={cafeImage}
-                  alt="Plantação de café"
-                  className="h-16 w-20 rounded-xl object-cover"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-bold">
-                      Café Arábica Especial
-                    </h3>
-                    <span className="rounded-full bg-[#dff4e6] px-2 py-1 text-[10px] font-bold text-[#26784c]">
-                      Ativa
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-[#78877d]">
-                    320 sacas • Bebida dura • Disponível até 25 out.
-                  </p>
-                </div>
-                <div className="text-right">
-                  <strong className="text-sm">R$ 1.280,00</strong>
-                  <p className="text-xs text-[#78877d]">por saca</p>
-                </div>
-              </article>
-
-              <article className="flex flex-wrap items-center gap-4 rounded-xl bg-[#f7f8f5] p-3">
-                <img
-                  src={milhoImage}
-                  alt="Plantação de milho"
-                  className="h-16 w-20 rounded-xl object-cover"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-bold">
-                      Milho Safrinha Seco
-                    </h3>
-                    <span className="rounded-full bg-[#fff0d5] px-2 py-1 text-[10px] font-bold text-[#ae6e13]">
-                      Em negociação
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-[#78877d]">
-                    480 sacas • Tipo 1 • 2 propostas recebidas
-                  </p>
-                </div>
-                <div className="text-right">
-                  <strong className="text-sm">R$ 66,50</strong>
-                  <p className="text-xs text-[#78877d]">por saca</p>
-                </div>
-              </article>
-            </div>
+            {recentOffers.length === 0 ? (
+              <p className="rounded-xl bg-[#f7f8f5] p-5 text-sm text-[#78877d]">Você ainda não publicou ofertas.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentOffers.map((offer) => (
+                  <article key={offer.id} className="flex flex-wrap items-center gap-4 rounded-xl bg-[#f7f8f5] p-4">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-bold">{offer.produto}</h3>
+                      <p className="mt-1 text-xs text-[#78877d]">{Number(offer.quantidade)} {offer.unidade} • {offer.categoria} • {offer.localizacao}</p>
+                    </div>
+                    <div className="text-right">
+                      <strong className="text-sm">{currency(Number(offer.preco))}</strong>
+                      <p className="text-xs text-[#78877d]">{offer.status}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div
-            id="negociacoes"
-            className="rounded-2xl bg-[#1d4818] p-6 text-white shadow-sm"
-          >
-            <h2 className="text-xl font-extrabold">
-              Você tem 2 propostas novas
-            </h2>
+          <div className="rounded-2xl bg-[#1d4818] p-6 text-white shadow-sm">
+            <h2 className="text-xl font-extrabold">{openProposals.length} propostas em andamento</h2>
             <p className="mt-3 text-sm leading-relaxed text-[#bdd2b9]">
-              A mais recente é da Cooperativa Cerrado para seu lote de café.
+              {latestProposal ? `A mais recente é de ${latestProposal.comprador.nome} para ${latestProposal.oferta.produto}.` : "Nenhuma proposta pendente no momento."}
             </p>
-
-            <div className="mt-5 rounded-xl border border-white/15 bg-white/10 p-4">
-              <p className="text-xs font-semibold text-[#d0f08a]">
-                Cooperativa Cerrado
-              </p>
-              <p className="mt-2 text-2xl font-extrabold">
-                R$ 1.245,00/saca
-              </p>
-              <p className="mt-1 text-xs text-[#bdd2b9]">
-                Responder até amanhã, 18h
-              </p>
-            </div>
-
-            <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold">
-              <ArrowRight size={16} />
-              Detalhes na página de negociações
-            </div>
+            {latestProposal && (
+              <div className="mt-5 rounded-xl border border-white/15 bg-white/10 p-4">
+                <p className="text-xs font-semibold text-[#d0f08a]">{latestProposal.comprador.nome}</p>
+                <p className="mt-2 text-2xl font-extrabold">{currency(Number(latestProposal.preco))}</p>
+                <p className="mt-1 text-xs text-[#bdd2b9]">{latestProposal.oferta.produto} • {latestProposal.status}</p>
+              </div>
+            )}
+            <Link to="/produtor/negociacoes" className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold hover:bg-white/20">
+              <ArrowRight size={16} /> Ver negociações
+            </Link>
           </div>
-        </section>
-
-        <section id="pedidos" className="mt-8 text-center text-xs text-[#78877d]">
-          Pedidos e logística serão implementados nas próximas etapas.
         </section>
       </main>
     </div>

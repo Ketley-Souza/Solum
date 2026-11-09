@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js'
 import { ConflictError, NotFoundError } from '../errors.js'
 import { exigirPerfil, exigirPositivo, type ValorDecimal } from './comum.js'
 import { converterParaToneladas } from './pedido.service.js'
+import { notificarNovaOferta } from './notificacao.service.js'
 
 export type DadosOferta = {
   produto: string
@@ -26,7 +27,7 @@ export async function criarOferta(ator: UsuarioAutenticado, dados: DadosOferta):
   // Falha cedo: sem conversão para toneladas o frete (RN06) não poderia ser emitido no fechamento.
   converterParaToneladas(quantidade, dados.unidade)
 
-  return prisma.oferta.create({
+  const oferta = await prisma.oferta.create({
     data: {
       produtor_id: ator.id,
       produto: dados.produto,
@@ -42,6 +43,8 @@ export async function criarOferta(ator: UsuarioAutenticado, dados: DadosOferta):
       imagem_url: dados.imagem_url ?? null,
     },
   })
+  await notificarNovaOferta(oferta)
+  return oferta
 }
 
 /** ATIVA <-> PAUSADA; ATIVA/PAUSADA -> ENCERRADA (terminal). */
@@ -69,6 +72,34 @@ export async function alterarStatusOferta(
   if (count === 0) throw new ConflictError(`Oferta inexistente ou transição para ${novoStatus} não permitida`)
 }
 
+export async function atualizarOferta(
+  ator: UsuarioAutenticado,
+  ofertaId: string,
+  dados: DadosOferta,
+): Promise<Oferta> {
+  exigirPerfil(ator, PerfilUsuario.PRODUTOR)
+  const quantidade = exigirPositivo(dados.quantidade, 'quantidade')
+  converterParaToneladas(quantidade, dados.unidade)
+  const oferta = await prisma.oferta.updateMany({
+    where: { id: ofertaId, produtor_id: ator.id, excluido_em: null, status: { not: StatusOferta.ENCERRADA } },
+    data: {
+      produto: dados.produto,
+      categoria: dados.categoria,
+      qualidade: dados.qualidade,
+      safra: dados.safra,
+      quantidade,
+      unidade: dados.unidade,
+      preco: exigirPositivo(dados.preco, 'preco'),
+      localizacao: dados.localizacao,
+      periodo: dados.periodo,
+      descricao: dados.descricao ?? null,
+      imagem_url: dados.imagem_url ?? null,
+    },
+  })
+  if (oferta.count === 0) throw new NotFoundError('Oferta não encontrada ou encerrada')
+  return prisma.oferta.findUniqueOrThrow({ where: { id: ofertaId } })
+}
+
 /** RN09 + RN11 — remoção administrativa por soft-delete. */
 export async function removerOfertaPorAdmin(ator: UsuarioAutenticado, ofertaId: string): Promise<void> {
   exigirPerfil(ator, PerfilUsuario.ADMINISTRADOR)
@@ -93,4 +124,3 @@ export async function listarOfertas(statusFiltro?: StatusOferta) {
     orderBy: { criado_em: 'desc' },
   })
 }
-

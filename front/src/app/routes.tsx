@@ -1,10 +1,8 @@
-import { useEffect } from "react";
 import {
   createBrowserRouter,
   Link,
   RouterProvider,
   useNavigate,
-  useParams,
   useRouteError,
 } from "react-router-dom";
 import HomePage from "../pages/home/HomePage";
@@ -22,6 +20,7 @@ import CarrierPage from "../pages/carrier";
 import AvailableFreightsPage from "../pages/carrier/available-freights";
 import MyFreightsPage from "../pages/carrier/my-freights";
 import CarrierHistoryPage from "../pages/carrier/history";
+import ProfilePage from "../pages/ProfilePage";
 import { authService } from "../services/authService";
 import { useAuthStore } from "../stores/authStore";
 import { RequireProfile, PROFILE_HOME } from "../components/RequireProfile";
@@ -29,7 +28,6 @@ import type {
   AuthMode,
   CadastroPayload,
   LoginPayload,
-  Profile,
 } from "../types/auth";
 
 function AuthRoute({ mode }: { mode: AuthMode }) {
@@ -55,33 +53,6 @@ function AuthRoute({ mode }: { mode: AuthMode }) {
       onCadastro={handleCadastro}
     />
   );
-}
-
-/**
- * SOMENTE DESENVOLVIMENTO: cria uma sessão falsa e entra direto no perfil.
- * Acesse, por exemplo, http://localhost:5173/dev/entrar/transportador
- * A rota só é registrada quando import.meta.env.DEV é true (npm run dev).
- */
-function DevLogin() {
-  const { perfil } = useParams<{ perfil: Profile }>();
-  const navigate = useNavigate();
-  const setAuth = useAuthStore((state) => state.setAuth);
-
-  useEffect(() => {
-    if (!perfil || !(perfil in PROFILE_HOME)) {
-      navigate("/", { replace: true });
-      return;
-    }
-
-    setAuth({
-      token: "dev",
-      profile: perfil,
-      user: { id: "dev", name: "Usuário Teste", email: "teste@solum.dev" },
-    });
-    navigate(PROFILE_HOME[perfil], { replace: true });
-  }, [perfil, setAuth, navigate]);
-
-  return null;
 }
 
 function NotFoundPage() {
@@ -145,14 +116,6 @@ const router = createBrowserRouter([
       { path: "/login", element: <AuthRoute mode="entrar" /> },
       { path: "/cadastro", element: <AuthRoute mode="criar" /> },
 
-      // Atalho de desenvolvimento (não existe no build de produção)
-      // /dev/entrar/transportador
-      // /dev/entrar/comprador
-      // /dev/entrar/produtor
-      ...(import.meta.env.DEV
-        ? [{ path: "dev/entrar/:perfil", element: <DevLogin /> }]
-        : []),
-
       // Produtor
       {
         path: "produtor",
@@ -163,6 +126,7 @@ const router = createBrowserRouter([
           { path: "negociacoes", element: <ProducerNegotiationsPage /> },
           { path: "pedidos", element: <ProducerOrdersPage /> },
           { path: "notificacoes", element: <ProducerNotificationsPage /> },
+          { path: "perfil", element: <ProfilePage profile="produtor" /> },
         ],
       },
 
@@ -175,6 +139,7 @@ const router = createBrowserRouter([
           { path: "pedidos", element: <BuyerOrdersPage /> },
           { path: "notificacoes", element: <BuyerNotificationsPage /> },
           { path: "negociacao/:offerId", element: <BuyerNegotiationPage /> },
+          { path: "perfil", element: <ProfilePage profile="comprador" /> },
         ],
       },
 
@@ -187,6 +152,7 @@ const router = createBrowserRouter([
           { path: "fretes-disponiveis", element: <AvailableFreightsPage /> },
           { path: "meus-fretes", element: <MyFreightsPage /> },
           { path: "historico", element: <CarrierHistoryPage /> },
+          { path: "perfil", element: <ProfilePage profile="transportador" /> },
         ],
       },
 

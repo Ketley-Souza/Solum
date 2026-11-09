@@ -9,11 +9,15 @@ import {
 } from "lucide-react";
 
 import ProfileNavbar from "../../components/ProfileNavbar";
+import { useAuthStore } from "../../stores/authStore";
 import CreateOfferModal, {
   type NewOffer,
 } from "./CreateOfferModal";
 import EditOfferModal from "./EditOfferModal";
-import { offerService, type BackendOffer, type OfferStatus } from "../../services/offerService";
+import type { BackendOffer, OfferStatus } from "../../services/offerService";
+import { offerService } from "../../services/offerService";
+import { proposalService, type BackendProposal } from "../../services/proposalService";
+import { selectMyOffers, useOfferStore } from "../../stores/offerStore";
 
 import cafeImage from "../../assets/offer-cafe.png";
 import milhoImage from "../../assets/offer-milho.jpg";
@@ -46,117 +50,6 @@ const STATUS_TO_BACK: Partial<Record<Status, OfferStatus>> = {
   Pausada: "PAUSADA",
   Encerrada: "ENCERRADA",
 };
-
-const initialOffers: Offer[] = [
-  {
-    id: 1,
-    product: "Café Arábica Especial",
-    category: "Café",
-    classification: "Bebida dura",
-    harvest: "2026",
-    quantity: 320,
-    unit: "Sacas de 60 kg",
-    price: 1280,
-    location: "Patos de Minas",
-    availableFrom: "2026-10-25",
-    availableUntil: "2026-11-25",
-    description: "Lote de café arábica da safra 2026.",
-    observations: "Laudo de classificação disponível.",
-    proposals: "2 novas",
-    status: "Ativa",
-    image: cafeImage,
-  },
-  {
-    id: 2,
-    product: "Milho Safrinha Seco",
-    category: "Milho",
-    classification: "Tipo 1",
-    harvest: "2026",
-    quantity: 480,
-    unit: "Sacas de 60 kg",
-    price: 66.5,
-    location: "Lagoa Formosa",
-    availableFrom: "2026-10-25",
-    availableUntil: "2026-11-30",
-    description: "Milho safrinha seco.",
-    observations: "",
-    proposals: "1 ativa",
-    status: "Em negociação",
-    image: milhoImage,
-  },
-  {
-    id: 3,
-    product: "Soja Standard Tipo 1",
-    category: "Soja",
-    classification: "Umidade 13%",
-    harvest: "2026",
-    quantity: 600,
-    unit: "Sacas de 60 kg",
-    price: 132,
-    location: "Presidente Olegário",
-    availableFrom: "2026-10-25",
-    availableUntil: "2026-12-10",
-    description: "Soja Standard Tipo 1.",
-    observations: "",
-    proposals: "Nenhuma",
-    status: "Ativa",
-    image: sojaImage,
-  },
-  {
-    id: 4,
-    product: "Feijão Carioca Tipo 1",
-    category: "Feijão",
-    classification: "Tipo 1",
-    harvest: "2026",
-    quantity: 180,
-    unit: "Sacas de 60 kg",
-    price: 238,
-    location: "Patos de Minas",
-    availableFrom: "2026-10-25",
-    availableUntil: "2026-11-20",
-    description: "Feijão carioca da safra 2026.",
-    observations: "",
-    proposals: "Nenhuma",
-    status: "Pausada",
-    image: algodaoImage,
-  },
-  {
-    id: 5,
-    product: "Café Arábica Tradicional",
-    category: "Café",
-    classification: "Tradicional",
-    harvest: "2026",
-    quantity: 200,
-    unit: "Sacas de 60 kg",
-    price: 980,
-    location: "Patrocínio",
-    availableFrom: "2026-10-25",
-    availableUntil: "2026-12-15",
-    description: "Café arábica tradicional.",
-    observations: "",
-    proposals: "Nenhuma",
-    status: "Ativa",
-    image: cafeImage,
-  },
-  {
-    id: 6,
-    product: "Milho Tipo 1",
-    category: "Milho",
-    classification: "Tipo 1",
-    harvest: "2026",
-    quantity: 350,
-    unit: "Sacas de 60 kg",
-    price: 64,
-    location: "Patos de Minas",
-    availableFrom: "2026-10-25",
-    availableUntil: "2026-12-20",
-    description: "Milho Tipo 1, safra 2026.",
-    observations: "",
-    proposals: "Nenhuma",
-    status: "Ativa",
-    image: milhoImage,
-  },
-];
 
 const navigation = [
   { label: "Visão geral", href: "/produtor" },
@@ -204,7 +97,7 @@ function getBadge(status: Status) {
   }
 }
 
-function fromBackend(offer: BackendOffer, index: number): Offer {
+function fromBackend(offer: BackendOffer, index: number, proposalCount: number): Offer {
   const [availableFrom = "", availableUntil = ""] = offer.periodo.split(" a ");
   return {
     id: 1000 + index,
@@ -221,25 +114,33 @@ function fromBackend(offer: BackendOffer, index: number): Offer {
     availableUntil,
     description: offer.descricao ?? "",
     observations: "",
-    proposals: "Nenhuma",
+    proposals: proposalCount === 0 ? "Nenhuma" : `${proposalCount} ${proposalCount === 1 ? "proposta" : "propostas"}`,
     status: STATUS_FROM_BACK[offer.status],
     image: offer.imagem_url || getImage(offer.categoria),
   };
 }
 
 export default function ProducerOffersPage() {
-  const [offers, setOffers] = useState<Offer[]>(initialOffers);
+  const profileName = useAuthStore((state) => state.user?.name ?? "Produtor");
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [apiError, setApiError] = useState("");
+  const [proposals, setProposals] = useState<BackendProposal[]>([]);
+  const backendOffers = useOfferStore(selectMyOffers);
+  const fetchMyOffers = useOfferStore((state) => state.fetchMyOffers);
+  const createOfferInStore = useOfferStore((state) => state.createOffer);
+  const changeOfferStatusInStore = useOfferStore((state) => state.changeOfferStatus);
 
-  // Ofertas reais do produtor logado vêm do banco; as de exemplo continuam abaixo delas.
   useEffect(() => {
-    offerService
-      .listMine()
-      .then((mine) =>
-        setOffers([...mine.map(fromBackend), ...initialOffers]),
-      )
-      .catch(() => setOffers(initialOffers));
-  }, []);
+    void fetchMyOffers();
+    proposalService.list().then(setProposals).catch(() => setProposals([]));
+  }, [fetchMyOffers]);
+  useEffect(() => {
+    const proposalCounts = proposals.reduce<Record<string, number>>((counts, proposal) => {
+      counts[proposal.oferta.id] = (counts[proposal.oferta.id] ?? 0) + 1;
+      return counts;
+    }, {});
+    setOffers(backendOffers.map((offer, index) => fromBackend(offer, index, proposalCounts[offer.id] ?? 0)));
+  }, [backendOffers, proposals]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("Todas");
   const [menuId, setMenuId] = useState<number | null>(null);
@@ -307,7 +208,7 @@ export default function ProducerOffersPage() {
   // Criar oferta (gravada no banco)
   async function createOffer(data: NewOffer) {
     try {
-      const saved = await offerService.create({
+      const saved = await createOfferInStore({
         produto: data.product,
         categoria: data.category,
         qualidade: data.classification,
@@ -341,24 +242,32 @@ export default function ProducerOffersPage() {
   }
 
   // Editar oferta
-  function saveEditedOffer(data: NewOffer) {
-    if (editingId === null) return;
-
-    setOffers((current) =>
-      current.map((offer) =>
-        offer.id === editingId &&
-        offer.status !== "Encerrada"
-          ? {
-              ...offer,
-              ...data,
-              image: getImage(data.category),
-            }
-          : offer
-      )
-    );
-
-    setEditingId(null);
-    setMenuId(null);
+  async function saveEditedOffer(data: NewOffer) {
+    const target = offers.find((offer) => offer.id === editingId);
+    if (!target?.remoteId) {
+      setApiError("A oferta não possui uma referência válida no banco.");
+      return;
+    }
+    try {
+      await offerService.update(target.remoteId, {
+        produto: data.product,
+        categoria: data.category,
+        qualidade: data.classification,
+        safra: data.harvest,
+        quantidade: data.quantity,
+        unidade: data.unit,
+        preco: data.price,
+        localizacao: data.location,
+        periodo: `${data.availableFrom} a ${data.availableUntil}`,
+        descricao: [data.description, data.observations].filter(Boolean).join("\n") || undefined,
+      });
+      await fetchMyOffers(true);
+      setEditingId(null);
+      setMenuId(null);
+      setApiError("");
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : "Não foi possível atualizar a oferta.");
+    }
   }
 
   // Pausar, reativar e encerrar
@@ -367,7 +276,7 @@ export default function ProducerOffersPage() {
     const backStatus = STATUS_TO_BACK[status];
     if (target?.remoteId && backStatus) {
       try {
-        await offerService.changeStatus(target.remoteId, backStatus);
+        await changeOfferStatusInStore(target.remoteId, backStatus);
         setApiError("");
       } catch (error) {
         setApiError(error instanceof Error ? error.message : "Não foi possível atualizar a oferta.");
@@ -388,7 +297,7 @@ export default function ProducerOffersPage() {
   return (
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
       <ProfileNavbar
-        profileName="João Ribeiro"
+        profileName={profileName}
         role="PRODUTOR"
         links={navigation}
         notificationCount={2}
@@ -676,9 +585,7 @@ export default function ProducerOffersPage() {
               </div>
 
               <p className="mt-4 text-xs text-[#78877d]">
-                Nesta versão demonstrativa, a oferta será encerrada
-                somente na página atual. Nenhum dado será enviado
-                ao banco de dados.
+                A oferta será marcada como encerrada no banco de dados e não poderá ser reativada.
               </p>
             </div>
 

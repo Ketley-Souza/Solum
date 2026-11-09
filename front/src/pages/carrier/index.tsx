@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
   ArrowRight,
   CircleCheck,
@@ -7,13 +8,14 @@ import {
   Star,
   Truck,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import ProfileNavbar from "../../components/ProfileNavbar";
-import {
-  transportService,
-  type Freight,
-} from "../../services/transportService";
 import { useAuthStore } from "../../stores/authStore";
+import {
+  selectAllFreights,
+  selectFreightsError,
+  selectFreightsLoading,
+  useFreightStore,
+} from "../../stores/freightStore";
 
 const links = [
   { label: "Visão geral", href: "/transportador" },
@@ -87,34 +89,16 @@ function MetricCard({
 
 export default function CarrierPage() {
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
 
-  const [freights, setFreights] = useState<Freight[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  async function load() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const result = await transportService.listFreights();
-      setFreights(result);
-    } catch (err) {
-      setFreights([]);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Não foi possível carregar o painel.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  const freights = useFreightStore(selectAllFreights);
+  const loading = useFreightStore(selectFreightsLoading);
+  const error = useFreightStore(selectFreightsError);
+  const fetchFreights = useFreightStore((state) => state.fetchFreights);
+  const load = useCallback(() => fetchFreights(undefined, true), [fetchFreights]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   const myFreights = freights.filter(
     (freight) => freight.transportador_id === user?.id,
@@ -154,12 +138,6 @@ export default function CarrierPage() {
       />
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-10 lg:py-8">
-        {token === "dev" && (
-          <p className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
-            Modo de demonstração — indicadores calculados com fretes fictícios.
-          </p>
-        )}
-
         <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-wide text-[#39752b]">

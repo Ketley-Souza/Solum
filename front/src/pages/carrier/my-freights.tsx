@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   CalendarDays,
   MapPin,
@@ -7,11 +8,14 @@ import {
   Truck,
 } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
-import {
-  transportService,
-  type Freight,
-} from "../../services/transportService";
+import type { Freight } from "../../services/transportService";
 import { useAuthStore } from "../../stores/authStore";
+import {
+  selectActiveFreights,
+  selectFreightsError,
+  selectFreightsLoading,
+  useFreightStore,
+} from "../../stores/freightStore";
 
 const links = [
   { label: "Visão geral", href: "/transportador" },
@@ -44,44 +48,22 @@ function statusLabel(status: Freight["status"]) {
 
 export default function MyFreightsPage() {
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
 
-  const [freights, setFreights] = useState<Freight[]>([]);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-
-  async function load() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const allFreights = await transportService.listFreights();
-
-      setFreights(
-        allFreights.filter(
-          (freight) =>
-            freight.transportador_id === user?.id &&
-            (freight.status === "ACEITO" ||
-              freight.status === "EM_ROTA"),
-        ),
-      );
-    } catch (err) {
-      setFreights([]);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Não foi possível carregar seus fretes.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  const freightsSelector = useMemo(() => selectActiveFreights(user?.id), [user?.id]);
+  const freights = useFreightStore(useShallow(freightsSelector));
+  const loading = useFreightStore(selectFreightsLoading);
+  const storeError = useFreightStore(selectFreightsError);
+  const fetchFreights = useFreightStore((state) => state.fetchFreights);
+  const startTransport = useFreightStore((state) => state.startTransport);
+  const confirmDelivery = useFreightStore((state) => state.confirmDelivery);
 
   useEffect(() => {
-    void load();
-  }, [user?.id]);
+    void fetchFreights(undefined, true);
+  }, [fetchFreights, user?.id]);
+  const load = () => fetchFreights(undefined, true);
 
   async function advance(freight: Freight) {
     setBusy(freight.id);
@@ -90,16 +72,15 @@ export default function MyFreightsPage() {
 
     try {
       if (freight.status === "ACEITO") {
-        await transportService.startTransport(freight.id);
+        await startTransport(freight.id);
         setMessage("Transporte iniciado com sucesso!");
       } else if (freight.status === "EM_ROTA") {
-        await transportService.confirmDelivery(freight.id);
+        await confirmDelivery(freight.id);
         setMessage(
           "Entrega confirmada! O frete foi enviado para o histórico.",
         );
       }
 
-      await load();
     } catch (err) {
       setError(
         err instanceof Error
@@ -118,6 +99,7 @@ export default function MyFreightsPage() {
   const inTransit = freights.filter(
     (freight) => freight.status === "EM_ROTA",
   ).length;
+  const displayError = error || storeError;
 
   return (
     <div className="min-h-screen bg-[#fafaf8] font-['Manrope'] text-[#0b150c]">
@@ -128,12 +110,6 @@ export default function MyFreightsPage() {
       />
 
       <main className="mx-auto max-w-[1440px] px-5 py-8 md:px-10 lg:px-12">
-        {token === "dev" && (
-          <p className="mb-5 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
-            Modo de demonstração — nenhuma alteração é enviada ao banco.
-          </p>
-        )}
-
         <p className="text-sm font-extrabold uppercase tracking-wide text-[#548047]">
           Acompanhamento
         </p>
@@ -158,12 +134,12 @@ export default function MyFreightsPage() {
           </button>
         </div>
 
-        {error && (
+        {displayError && (
           <p
             role="alert"
             className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700"
           >
-            {error}
+            {displayError}
           </p>
         )}
 

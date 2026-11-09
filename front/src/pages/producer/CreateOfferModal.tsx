@@ -35,7 +35,7 @@ const initialForm = {
   quantity: "",
   unit: "Sacas de 60 kg",
   price: "",
-  location: "Fazenda Boa Vista • Patos de Minas, MG",
+  location: "",
   availableFrom: "",
   availableUntil: "",
   description: "",
@@ -130,7 +130,7 @@ export default function CreateOfferModal({
     setConfirming(true);
   }
 
-  // Confirmar a publicação demonstrativa
+  // Confirmar a publicação
   function publish() {
     onCreate({
       product: form.product.trim(),
@@ -603,7 +603,7 @@ export default function CreateOfferModal({
               </div>
 
               <p className="text-xs text-[#78877d]">
-                Publicação demonstrativa. As imagens selecionadas
+                Publicação no banco de dados. As imagens selecionadas
                 ainda não serão enviadas ao servidor.
               </p>
             </div>

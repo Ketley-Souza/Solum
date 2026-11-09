@@ -18,13 +18,24 @@ export const cadastroUsuarioSchema = z.object({
   documento: z.string().regex(/^(?:\d{11}|\d{14})$/, 'Documento deve conter 11 (CPF) ou 14 (CNPJ) dígitos numéricos'),
   whatsapp: z.string().trim().min(8).max(20),
   email: z.email('E-mail inválido').max(254),
-  senha: z.string().min(6, 'A senha deve ter no mínimo 6 caracteres').max(128),
+  senha: z
+    .string()
+    .min(8, 'A senha deve ter no mínimo 8 caracteres')
+    .max(128)
+    .regex(/[A-Z]/, 'A senha deve conter ao menos uma letra maiúscula')
+    .regex(/\d/, 'A senha deve conter ao menos um número'),
   perfil: z.enum(PerfilUsuario),
 })
 
 export const loginSchema = z.object({
   email: z.email('E-mail inválido'),
   senha: z.string().min(1, 'Senha é obrigatória'),
+})
+
+export const atualizarPerfilSchema = z.object({
+  nome: z.string().trim().min(2).max(150),
+  email: z.email('E-mail inválido').max(254),
+  whatsapp: z.string().trim().min(8).max(20),
 })
 
 export const alterarStatusUsuarioSchema = z.object({
@@ -53,6 +64,8 @@ export const criarOfertaSchema = z.object({
 export const alterarStatusOfertaSchema = z.object({
   status: z.enum(StatusOferta),
 })
+
+export const atualizarOfertaSchema = criarOfertaSchema
 
 export const filtroOfertasQuerySchema = z.object({
   status: z.enum(StatusOferta).optional(),

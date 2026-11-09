@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   CheckCircle2,
   MapPin,
@@ -6,11 +7,13 @@ import {
   Search,
 } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
-import {
-  transportService,
-  type Freight,
-} from "../../services/transportService";
 import { useAuthStore } from "../../stores/authStore";
+import {
+  selectCompletedFreights,
+  selectFreightsError,
+  selectFreightsLoading,
+  useFreightStore,
+} from "../../stores/freightStore";
 
 const links = [
   { label: "Visão geral", href: "/transportador" },
@@ -30,42 +33,18 @@ function money(value: number | string | null) {
 
 export default function CarrierHistoryPage() {
   const user = useAuthStore((state) => state.user);
-  const token = useAuthStore((state) => state.token);
 
-  const [freights, setFreights] = useState<Freight[]>([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  async function load() {
-    setLoading(true);
-    setError("");
-
-    try {
-      const allFreights = await transportService.listFreights("ENTREGUE");
-
-      setFreights(
-        allFreights.filter(
-          (freight) =>
-            freight.transportador_id === user?.id &&
-            freight.status === "ENTREGUE",
-        ),
-      );
-    } catch (err) {
-      setFreights([]);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Não foi possível carregar o histórico.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  const freightsSelector = useMemo(() => selectCompletedFreights(user?.id), [user?.id]);
+  const freights = useFreightStore(useShallow(freightsSelector));
+  const loading = useFreightStore(selectFreightsLoading);
+  const error = useFreightStore(selectFreightsError);
+  const fetchFreights = useFreightStore((state) => state.fetchFreights);
 
   useEffect(() => {
-    void load();
-  }, [user?.id]);
+    void fetchFreights("ENTREGUE", true);
+  }, [fetchFreights, user?.id]);
+  const load = () => fetchFreights("ENTREGUE", true);
 
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
@@ -98,12 +77,6 @@ export default function CarrierHistoryPage() {
       />
 
       <main className="mx-auto max-w-[1440px] px-5 py-8 md:px-10 lg:px-12">
-        {token === "dev" && (
-          <p className="mb-5 rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800">
-            Modo de demonstração — histórico fictício.
-          </p>
-        )}
-
         <p className="text-sm font-extrabold uppercase tracking-wide text-[#548047]">
           Seu desempenho
         </p>

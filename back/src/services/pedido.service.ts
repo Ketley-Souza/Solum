@@ -141,9 +141,21 @@ export async function listarPedidos(ator: UsuarioAutenticado) {
     include: {
       oferta: { include: { produtor: { select: { nome: true } } } },
       comprador: { select: { nome: true } },
-      frete: true,
+      frete: {
+        include: {
+          transportador: { select: { nome: true, whatsapp: true } },
+          veiculo: true,
+        },
+      },
+      proposta: {
+        include: {
+          contrapropostas: {
+            where: { excluido_em: null },
+            orderBy: { criado_em: 'desc' },
+          },
+        },
+      },
     },
     orderBy: { criado_em: 'desc' },
   })
 }
-

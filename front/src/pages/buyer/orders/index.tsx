@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CheckCircle2, Clock3, ShoppingBag, TrendingUp, Truck } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Clock3, ShoppingBag, TrendingUp, Truck, X } from 'lucide-react'
 import ProfileNavbar from '../../../components/ProfileNavbar'
 import soja from '../../../assets/offer-soja.jpg'
-import { orderService, type BackendOrder, type OrderStatus } from '../../../services/orderService'
+import type { BackendOrder, OrderStatus } from '../../../services/orderService'
+import { proposalService } from '../../../services/proposalService'
+import { selectOrders, selectOrdersError, selectOrdersLoading, useOrderStore } from '../../../stores/orderStore'
 
 type Status = 'Em andamento' | 'Aguardando ação' | 'Concluído' | 'Em separação'
-type Order = { id: string; name: string; supplier: string; volume: string; total: string; status: Status; updated: string; image: string }
+type Order = {
+  id: string; name: string; supplier: string; volume: string; total: string; status: Status;
+  updated: string; image: string; backend: BackendOrder;
+}
 const STATUS_LABEL: Record<OrderStatus, Status> = {
   ABERTO: 'Aguardando ação',
   NEGOCIANDO: 'Aguardando ação',
@@ -22,9 +27,12 @@ function toOrder(pedido: BackendOrder): Order {
     supplier: pedido.oferta.produtor?.nome ?? '—',
     volume: `${Number(pedido.quantidade_final)} ${pedido.oferta.unidade}`,
     total: brl(Number(pedido.preco_final) * Number(pedido.quantidade_final)),
-    status: STATUS_LABEL[pedido.status],
+    status: pedido.proposta?.contrapropostas[0]?.status === 'PENDENTE'
+      ? 'Aguardando ação'
+      : STATUS_LABEL[pedido.status],
     updated: new Date(pedido.atualizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }),
     image: pedido.oferta.imagem_url || soja,
+    backend: pedido,
   }
 }
 const filters = ['Todos', 'Em andamento', 'Aguardando ação', 'Concluídos', 'Cancelados'] as const
@@ -33,15 +41,18 @@ type Filter = typeof filters[number]
 export default function BuyerOrdersPage() {
   const [filter, setFilter] = useState<Filter>('Todos')
   const [selected, setSelected] = useState<Order | null>(null)
-  const [orders, setOrders] = useState<Order[]>([])
-  const [error, setError] = useState('')
+  const backendOrders = useOrderStore(selectOrders)
+  const loading = useOrderStore(selectOrdersLoading)
+  const error = useOrderStore(selectOrdersError)
+  const fetchOrders = useOrderStore((state) => state.fetchOrders)
+  const orders = useMemo(() => backendOrders.map(toOrder), [backendOrders])
   useEffect(() => {
-    orderService.list().then((pedidos) => setOrders(pedidos.map(toOrder))).catch((e: Error) => setError(e.message))
-  }, [])
+    void fetchOrders()
+  }, [fetchOrders])
   const inProgress = orders.filter((o) => o.status === 'Em andamento' || o.status === 'Em separação').length
   const waiting = orders.filter((o) => o.status === 'Aguardando ação').length
   const done = orders.filter((o) => o.status === 'Concluído').length
-  const volume = orders.reduce((sum, o) => sum + Number(o.total.replace(/[^\d,]/g, '').replace(',', '.')), 0)
+  const volume = orders.reduce((sum, o) => sum + Number(o.backend.preco_final) * Number(o.backend.quantidade_final), 0)
   const visibleOrders = useMemo(() => orders.filter((order) => {
     if (filter === 'Todos') return true
     if (filter === 'Concluídos') return order.status === 'Concluído'
@@ -60,7 +71,6 @@ export default function BuyerOrdersPage() {
         links={[
           { label: 'Marketplace', href: '/comprador' },
           { label: 'Meus pedidos', href: '/comprador/pedidos' },
-          { label: 'Negociações', href: '/comprador/negociacao/1' },
         ]}
       />
 
@@ -89,11 +99,50 @@ export default function BuyerOrdersPage() {
           <div className="mt-3 flex flex-wrap gap-2">{filters.map((item) => <button key={item} onClick={() => setFilter(item)} className={`rounded-full border px-4 py-2 text-[11px] font-bold transition ${filter === item ? 'border-[#173b21] bg-[#173b21] text-white' : 'border-[#e0e6dd] bg-white text-[#415247] hover:bg-[#eef2e8]'}`}>{item}{item === 'Todos' ? ` ${orders.length}` : item === 'Em andamento' ? ` ${inProgress}` : item === 'Aguardando ação' ? ` ${waiting}` : item === 'Concluídos' ? ` ${done}` : ''}</button>)}</div>
           <div className="mt-4 overflow-x-auto rounded-[20px] border border-[#e0e6dd] bg-white">
             <table className="w-full min-w-[720px] text-left"><thead className="bg-[#eef2e8] text-[10px] font-bold uppercase text-[#708077]"><tr><th className="px-4 py-3">Produto</th><th className="px-3 py-3">Pedido</th><th className="px-3 py-3">Volume</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Atualização</th><th className="px-3 py-3" aria-label="Detalhes" /></tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id} className="border-t border-[#e9ede7] text-xs"><td className="px-4 py-3"><div className="flex items-center gap-3"><img src={order.image} alt="" className="size-12 rounded-lg object-cover" /><div><strong className="block font-bold">{order.name}</strong><small className="text-[10px] text-[#708077]">{order.supplier}</small></div></div></td><td className="px-3 py-3 font-semibold">{order.id}</td><td className="px-3 py-3 text-[#708077]">{order.volume}</td><td className="px-3 py-3 font-bold">{order.total}</td><td className="px-3 py-3"><span className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[9px] font-extrabold ${order.status === 'Concluído' ? 'bg-[#e2f5e7] text-[#287a48]' : order.status === 'Aguardando ação' ? 'bg-[#fff0d8] text-[#ad6a15]' : 'bg-[#e3f2f5] text-[#34788b]'}`}>{order.status.toUpperCase()}</span></td><td className="px-3 py-3 text-[11px] text-[#708077]">{order.updated}</td><td className="px-3 py-3"><button onClick={() => setSelected(order)} aria-label={`Ver detalhes de ${order.name}`} className="rounded-lg bg-[#f0f4eb] p-2 hover:bg-[#e1efce]"><ArrowRight size={15} /></button></td></tr>)}</tbody></table>
-            {visibleOrders.length === 0 && <p className="p-8 text-center text-sm text-[#708077]">{error ? error : 'Nenhum pedido nesta categoria.'}</p>}
+            {visibleOrders.length === 0 && <p className="p-8 text-center text-sm text-[#708077]">{loading ? 'Carregando pedidos...' : error ? error : 'Nenhum pedido nesta categoria.'}</p>}
           </div>
         </section>
       </main>
-      {selected && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onClick={() => setSelected(null)}><section role="dialog" aria-modal="true" aria-label="Detalhes do pedido" onClick={(event) => event.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><div className="flex items-start justify-between"><div><p className="text-xs text-[#708077]">{selected.id}</p><h2 className="mt-1 text-xl font-extrabold">{selected.name}</h2></div><button onClick={() => setSelected(null)} className="rounded-lg bg-[#eef2e8] px-3 py-1.5 text-sm font-bold">Fechar</button></div><img src={selected.image} alt="" className="mt-4 h-40 w-full rounded-xl object-cover" /><p className="mt-4 text-sm"><strong>Fornecedor:</strong> {selected.supplier}</p><p className="mt-2 text-sm"><strong>Volume:</strong> {selected.volume}</p><p className="mt-2 text-sm"><strong>Total:</strong> {selected.total}</p><p className="mt-2 text-sm"><strong>Status:</strong> {selected.status}</p></section></div>}
+      {selected && <OrderDetailsModal order={selected} onClose={() => setSelected(null)} onUpdated={() => { setSelected(null); void fetchOrders(true) }} />}
     </div>
   )
+}
+
+function OrderDetailsModal({ order, onClose, onUpdated }: { order: Order; onClose: () => void; onUpdated: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const proposal = order.backend.proposta
+  const counter = proposal?.contrapropostas[0]
+  const canAnswer = counter?.status === 'PENDENTE'
+
+  async function answer(decision: 'accept' | 'reject') {
+    if (!counter) return
+    setBusy(true)
+    setError('')
+    try {
+      if (decision === 'accept') await proposalService.acceptCounter(counter.id)
+      else await proposalService.rejectCounter(counter.id)
+      onUpdated()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar a negociação.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onClick={onClose}>
+    <section role="dialog" aria-modal="true" aria-label="Detalhes do pedido" onClick={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+      <div className="flex items-start justify-between gap-4"><div><p className="text-xs text-[#708077]">{order.id}</p><h2 className="mt-1 text-xl font-extrabold">{order.name}</h2></div><button onClick={onClose} aria-label="Fechar" className="rounded-lg bg-[#eef2e8] p-2"><X size={16} /></button></div>
+      <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+        <p><span className="block text-[10px] uppercase text-[#708077]">Fornecedor</span><strong>{order.supplier}</strong></p>
+        <p><span className="block text-[10px] uppercase text-[#708077]">Status</span><strong>{order.status}</strong></p>
+        <p><span className="block text-[10px] uppercase text-[#708077]">Volume</span><strong>{order.volume}</strong></p>
+        <p><span className="block text-[10px] uppercase text-[#708077]">Total</span><strong>{order.total}</strong></p>
+        <p className="col-span-2"><span className="block text-[10px] uppercase text-[#708077]">Entrega</span><strong>{order.backend.endereco_entrega}</strong></p>
+      </div>
+      {order.backend.frete && <div className="mt-5 rounded-xl bg-[#eef6e9] p-4 text-sm"><strong>Logística</strong><p className="mt-2">Frete {order.backend.frete.codigo} · {order.backend.frete.status}</p><p className="mt-1 text-xs text-[#708077]">Transportador: {order.backend.frete.transportador?.nome ?? 'Aguardando atribuição'}</p></div>}
+      {proposal && <div className="mt-5 rounded-xl border border-[#e0e6dd] p-4 text-sm"><strong>Negociação</strong><p className="mt-2">Sua proposta: {brl(Number(proposal.preco))} por unidade</p>{counter && <><p className="mt-1">Contraproposta do produtor: <strong>{brl(Number(counter.preco_contraproposta))}</strong></p>{counter.mensagem && <p className="mt-2 rounded-lg bg-[#f7f8f3] p-3 text-xs">{counter.mensagem}</p>}</>}{canAnswer ? <div className="mt-4 flex gap-2"><button disabled={busy} onClick={() => answer('reject')} className="flex-1 rounded-lg border border-[#e0e6dd] px-3 py-2 text-xs font-bold text-[#a94843]">Recusar</button><button disabled={busy} onClick={() => answer('accept')} className="flex-1 rounded-lg bg-[#2d6922] px-3 py-2 text-xs font-bold text-white">Aceitar contraproposta</button></div> : <p className="mt-3 text-xs text-[#708077]">Esta negociação não aguarda uma ação sua.</p>}</div>}
+      {error && <p role="alert" className="mt-3 text-xs text-red-600">{error}</p>}
+    </section>
+  </div>
 }

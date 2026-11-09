@@ -46,8 +46,8 @@ export interface Offer {
 
 function authHeaders(): Record<string, string> {
   const token = useAuthStore.getState().token;
-  if (!token || token === "dev") {
-    throw new Error("Entre com uma conta real para usar o banco de dados.");
+  if (!token) {
+    throw new Error("Entre com uma conta para usar o banco de dados.");
   }
   return { Authorization: `Bearer ${token}` };
 }
@@ -85,6 +85,12 @@ export const offerService = {
     return authed(`/ofertas/${encodeURIComponent(id)}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
+    });
+  },
+  update(id: string, data: NewBackendOffer): Promise<BackendOffer> {
+    return authed(`/ofertas/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
     });
   },
 
