@@ -10,6 +10,7 @@ import AuthPage from "../pages/AuthPage";
 import BuyerPage from "../pages/buyer";
 import BuyerOrdersPage from "../pages/buyer/orders";
 import BuyerNegotiationPage from "../pages/buyer/negotiation";
+import BuyerNegotiationsPage from "../pages/buyer/negotiations";
 import BuyerNotificationsPage from "../pages/buyer/notifications";
 import ProducerPage from "../pages/producer";
 import ProducerNegotiationsPage from "../pages/producer/negotiations";
@@ -137,6 +138,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <BuyerPage /> },
           { path: "pedidos", element: <BuyerOrdersPage /> },
+          { path: "negociacoes", element: <BuyerNegotiationsPage /> },
           { path: "notificacoes", element: <BuyerNotificationsPage /> },
           { path: "negociacao/:offerId", element: <BuyerNegotiationPage /> },
           { path: "perfil", element: <ProfilePage profile="comprador" /> },

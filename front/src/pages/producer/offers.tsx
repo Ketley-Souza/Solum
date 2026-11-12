@@ -17,7 +17,11 @@ import EditOfferModal from "./EditOfferModal";
 import type { BackendOffer, OfferStatus } from "../../services/offerService";
 import { offerService } from "../../services/offerService";
 import { proposalService, type BackendProposal } from "../../services/proposalService";
-import { selectMyOffers, useOfferStore } from "../../stores/offerStore";
+import {
+  selectMyOffers,
+  selectMyOffersError,
+  useOfferStore,
+} from "../../stores/offerStore";
 
 import cafeImage from "../../assets/offer-cafe.png";
 import milhoImage from "../../assets/offer-milho.jpg";
@@ -31,10 +35,8 @@ type Status =
   | "Em negociação";
 
 type Offer = NewOffer & {
-  id: number;
-  /** Presente quando a oferta está gravada no banco de dados. */
-  remoteId?: string;
-  proposals: string;
+  id: string;
+  proposalCount: number;
   status: Status;
   image: string;
 };
@@ -97,11 +99,10 @@ function getBadge(status: Status) {
   }
 }
 
-function fromBackend(offer: BackendOffer, index: number, proposalCount: number): Offer {
+function fromBackend(offer: BackendOffer, proposalCount: number): Offer {
   const [availableFrom = "", availableUntil = ""] = offer.periodo.split(" a ");
   return {
-    id: 1000 + index,
-    remoteId: offer.id,
+    id: offer.id,
     product: offer.produto,
     category: offer.categoria,
     classification: offer.qualidade,
@@ -114,7 +115,8 @@ function fromBackend(offer: BackendOffer, index: number, proposalCount: number):
     availableUntil,
     description: offer.descricao ?? "",
     observations: "",
-    proposals: proposalCount === 0 ? "Nenhuma" : `${proposalCount} ${proposalCount === 1 ? "proposta" : "propostas"}`,
+    imageUrl: offer.imagem_url ?? undefined,
+    proposalCount,
     status: STATUS_FROM_BACK[offer.status],
     image: offer.imagem_url || getImage(offer.categoria),
   };
@@ -122,30 +124,45 @@ function fromBackend(offer: BackendOffer, index: number, proposalCount: number):
 
 export default function ProducerOffersPage() {
   const profileName = useAuthStore((state) => state.user?.name ?? "Produtor");
-  const [offers, setOffers] = useState<Offer[]>([]);
   const [apiError, setApiError] = useState("");
   const [proposals, setProposals] = useState<BackendProposal[]>([]);
+  const [proposalsError, setProposalsError] = useState("");
   const backendOffers = useOfferStore(selectMyOffers);
+  const offersError = useOfferStore(selectMyOffersError);
   const fetchMyOffers = useOfferStore((state) => state.fetchMyOffers);
   const createOfferInStore = useOfferStore((state) => state.createOffer);
   const changeOfferStatusInStore = useOfferStore((state) => state.changeOfferStatus);
 
   useEffect(() => {
     void fetchMyOffers();
-    proposalService.list().then(setProposals).catch(() => setProposals([]));
+    setProposalsError("");
+    proposalService
+      .list()
+      .then(setProposals)
+      .catch((error: unknown) => {
+        setProposals([]);
+        setProposalsError(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível carregar as propostas.",
+        );
+      });
   }, [fetchMyOffers]);
-  useEffect(() => {
+
+  const offers = useMemo(() => {
     const proposalCounts = proposals.reduce<Record<string, number>>((counts, proposal) => {
       counts[proposal.oferta.id] = (counts[proposal.oferta.id] ?? 0) + 1;
       return counts;
     }, {});
-    setOffers(backendOffers.map((offer, index) => fromBackend(offer, index, proposalCounts[offer.id] ?? 0)));
+    return backendOffers.map((offer) =>
+      fromBackend(offer, proposalCounts[offer.id] ?? 0),
+    );
   }, [backendOffers, proposals]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState("Todas");
-  const [menuId, setMenuId] = useState<number | null>(null);
-  const [closingId, setClosingId] = useState<number | null>(null);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [onlyWithProposals, setOnlyWithProposals] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -189,11 +206,11 @@ export default function ProducerOffersPage() {
         (tab === "Encerradas" && offer.status === "Encerrada");
 
       const matchesProposals =
-        !onlyWithProposals || offer.proposals !== "Nenhuma";
+        !onlyWithProposals || (!proposalsError && offer.proposalCount > 0);
 
       return matchesSearch && matchesTab && matchesProposals;
     });
-  }, [offers, search, tab, onlyWithProposals]);
+  }, [offers, search, tab, onlyWithProposals, proposalsError]);
 
   const offerToClose =
     offers.find((offer) => offer.id === closingId) ?? null;
@@ -208,7 +225,7 @@ export default function ProducerOffersPage() {
   // Criar oferta (gravada no banco)
   async function createOffer(data: NewOffer) {
     try {
-      const saved = await createOfferInStore({
+      await createOfferInStore({
         produto: data.product,
         categoria: data.category,
         qualidade: data.classification,
@@ -219,17 +236,10 @@ export default function ProducerOffersPage() {
         localizacao: data.location,
         periodo: data.availableFrom && data.availableUntil ? `${data.availableFrom} a ${data.availableUntil}` : "A combinar",
         descricao: [data.description, data.observations].filter(Boolean).join("\n") || undefined,
+        imagem_url: data.imageUrl,
       });
-      const newOffer: Offer = {
-        ...data,
-        id: Math.max(0, ...offers.map((offer) => offer.id)) + 1,
-        remoteId: saved.id,
-        proposals: "Nenhuma",
-        status: "Ativa",
-        image: getImage(data.category),
-      };
+      await fetchMyOffers(true);
 
-      setOffers((current) => [newOffer, ...current]);
       setApiError("");
       setTab("Todas");
       setSearch("");
@@ -244,12 +254,12 @@ export default function ProducerOffersPage() {
   // Editar oferta
   async function saveEditedOffer(data: NewOffer) {
     const target = offers.find((offer) => offer.id === editingId);
-    if (!target?.remoteId) {
-      setApiError("A oferta não possui uma referência válida no banco.");
+    if (!target) {
+      setApiError("A oferta selecionada não está mais disponível.");
       return;
     }
     try {
-      await offerService.update(target.remoteId, {
+      await offerService.update(target.id, {
         produto: data.product,
         categoria: data.category,
         qualidade: data.classification,
@@ -260,6 +270,7 @@ export default function ProducerOffersPage() {
         localizacao: data.location,
         periodo: `${data.availableFrom} a ${data.availableUntil}`,
         descricao: [data.description, data.observations].filter(Boolean).join("\n") || undefined,
+        imagem_url: data.imageUrl,
       });
       await fetchMyOffers(true);
       setEditingId(null);
@@ -271,12 +282,13 @@ export default function ProducerOffersPage() {
   }
 
   // Pausar, reativar e encerrar
-  async function changeStatus(id: number, status: Status) {
+  async function changeStatus(id: string, status: Status) {
     const target = offers.find((offer) => offer.id === id);
     const backStatus = STATUS_TO_BACK[status];
-    if (target?.remoteId && backStatus) {
+    if (target && backStatus) {
       try {
-        await changeOfferStatusInStore(target.remoteId, backStatus);
+        await changeOfferStatusInStore(target.id, backStatus);
+        await fetchMyOffers(true);
         setApiError("");
       } catch (error) {
         setApiError(error instanceof Error ? error.message : "Não foi possível atualizar a oferta.");
@@ -284,13 +296,6 @@ export default function ProducerOffersPage() {
         return;
       }
     }
-    setOffers((current) =>
-      current.map((offer) =>
-        offer.id === id && offer.status !== "Encerrada"
-          ? { ...offer, status }
-          : offer
-      )
-    );
     setMenuId(null);
   }
 
@@ -305,8 +310,12 @@ export default function ProducerOffersPage() {
       />
 
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
-        {apiError && (
-          <p className="mb-5 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{apiError}</p>
+        {(apiError || offersError || proposalsError) && (
+          <div className="mb-5 space-y-2">
+            {apiError && <p className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{apiError}</p>}
+            {offersError && <p className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{offersError}</p>}
+            {proposalsError && <p className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-800">Não foi possível carregar as propostas: {proposalsError}</p>}
+          </div>
         )}
 
         {/* Cabeçalho */}
@@ -367,15 +376,16 @@ export default function ProducerOffersPage() {
             <button
               type="button"
               onClick={() =>
-                setOnlyWithProposals((current) => !current)
+                !proposalsError && setOnlyWithProposals((current) => !current)
               }
               aria-pressed={onlyWithProposals}
+              disabled={Boolean(proposalsError)}
               title="Mostrar somente ofertas com propostas"
               className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold ${
                 onlyWithProposals
                   ? "border-[#2d6922] bg-[#e3f5e9]"
                   : "border-[#dce4d9] bg-white"
-              }`}
+              } disabled:cursor-not-allowed disabled:opacity-50`}
             >
               <SlidersHorizontal size={15} />
               Filtros
@@ -437,7 +447,11 @@ export default function ProducerOffersPage() {
                       Propostas
                     </p>
                     <p className="mt-1 text-xs font-bold">
-                      {offer.proposals}
+                      {proposalsError
+                        ? "Indisponível"
+                        : offer.proposalCount === 0
+                          ? "Nenhuma"
+                          : `${offer.proposalCount} ${offer.proposalCount === 1 ? "proposta" : "propostas"}`}
                     </p>
                   </div>
 

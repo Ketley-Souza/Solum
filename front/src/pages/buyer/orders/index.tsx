@@ -4,18 +4,17 @@ import { ArrowRight, CheckCircle2, Clock3, ShoppingBag, TrendingUp, Truck, X } f
 import ProfileNavbar from '../../../components/ProfileNavbar'
 import soja from '../../../assets/offer-soja.jpg'
 import type { BackendOrder, OrderStatus } from '../../../services/orderService'
-import { proposalService } from '../../../services/proposalService'
 import { selectOrders, selectOrdersError, selectOrdersLoading, useOrderStore } from '../../../stores/orderStore'
 
-type Status = 'Em andamento' | 'Aguardando ação' | 'Concluído' | 'Em separação'
+type Status = 'Em andamento' | 'Negociando' | 'Aguardando transporte' | 'Concluído' | 'Em separação'
 type Order = {
   id: string; name: string; supplier: string; volume: string; total: string; status: Status;
   updated: string; image: string; backend: BackendOrder;
 }
 const STATUS_LABEL: Record<OrderStatus, Status> = {
-  ABERTO: 'Aguardando ação',
-  NEGOCIANDO: 'Aguardando ação',
-  FECHADO: 'Em separação',
+  ABERTO: 'Negociando',
+  NEGOCIANDO: 'Negociando',
+  FECHADO: 'Aguardando transporte',
   EM_TRANSPORTE: 'Em andamento',
   ENTREGUE: 'Concluído',
 }
@@ -27,15 +26,13 @@ function toOrder(pedido: BackendOrder): Order {
     supplier: pedido.oferta.produtor?.nome ?? '—',
     volume: `${Number(pedido.quantidade_final)} ${pedido.oferta.unidade}`,
     total: brl(Number(pedido.preco_final) * Number(pedido.quantidade_final)),
-    status: pedido.proposta?.contrapropostas[0]?.status === 'PENDENTE'
-      ? 'Aguardando ação'
-      : STATUS_LABEL[pedido.status],
+    status: STATUS_LABEL[pedido.status],
     updated: new Date(pedido.atualizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }),
     image: pedido.oferta.imagem_url || soja,
     backend: pedido,
   }
 }
-const filters = ['Todos', 'Em andamento', 'Aguardando ação', 'Concluídos', 'Cancelados'] as const
+const filters = ['Todos', 'Em andamento', 'Negociando', 'Concluídos'] as const
 type Filter = typeof filters[number]
 
 export default function BuyerOrdersPage() {
@@ -49,15 +46,14 @@ export default function BuyerOrdersPage() {
   useEffect(() => {
     void fetchOrders()
   }, [fetchOrders])
-  const inProgress = orders.filter((o) => o.status === 'Em andamento' || o.status === 'Em separação').length
-  const waiting = orders.filter((o) => o.status === 'Aguardando ação').length
+  const inProgress = orders.filter((o) => o.status === 'Em andamento' || o.status === 'Em separação' || o.status === 'Aguardando transporte').length
+  const negotiating = orders.filter((o) => o.status === 'Negociando').length
   const done = orders.filter((o) => o.status === 'Concluído').length
   const volume = orders.reduce((sum, o) => sum + Number(o.backend.preco_final) * Number(o.backend.quantidade_final), 0)
   const visibleOrders = useMemo(() => orders.filter((order) => {
     if (filter === 'Todos') return true
     if (filter === 'Concluídos') return order.status === 'Concluído'
-    if (filter === 'Em andamento') return order.status === 'Em andamento' || order.status === 'Em separação'
-    if (filter === 'Cancelados') return false
+    if (filter === 'Em andamento') return order.status === 'Em andamento' || order.status === 'Em separação' || order.status === 'Aguardando transporte'
     return order.status === filter
   }), [filter, orders])
 
@@ -70,6 +66,7 @@ export default function BuyerOrdersPage() {
         notificationsHref="/comprador/notificacoes"
         links={[
           { label: 'Marketplace', href: '/comprador' },
+          { label: 'Negociações', href: '/comprador/negociacoes' },
           { label: 'Meus pedidos', href: '/comprador/pedidos' },
         ]}
       />
@@ -82,8 +79,8 @@ export default function BuyerOrdersPage() {
 
         <section aria-label="Resumo dos pedidos" className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: 'Em andamento', value: String(inProgress).padStart(2, '0'), detail: 'Em separação ou transporte', icon: Truck, dark: true },
-            { label: 'Aguardando ação', value: String(waiting).padStart(2, '0'), detail: 'Contrato ou pagamento', icon: Clock3, dark: false },
+            { label: 'Em andamento', value: String(inProgress).padStart(2, '0'), detail: 'Aguardando transporte ou em rota', icon: Truck, dark: true },
+            { label: 'Negociando', value: String(negotiating).padStart(2, '0'), detail: 'Propostas em andamento', icon: Clock3, dark: false },
             { label: 'Concluídos', value: String(done).padStart(2, '0'), detail: 'Entregas finalizadas', icon: CheckCircle2, dark: false },
             { label: 'Volume negociado', value: brl(volume), detail: 'Soma dos seus pedidos', icon: TrendingUp, dark: false },
           ].map(({ label, value, detail, icon: Icon, dark }) => (
@@ -96,39 +93,27 @@ export default function BuyerOrdersPage() {
 
         <section className="mt-9" aria-labelledby="history-title">
           <p className="text-[10px] font-bold uppercase tracking-wide text-[#708077]">Histórico completo</p><h2 id="history-title" className="mt-1 font-['Bricolage_Grotesque'] text-2xl font-extrabold">Todos os pedidos</h2>
-          <div className="mt-3 flex flex-wrap gap-2">{filters.map((item) => <button key={item} onClick={() => setFilter(item)} className={`rounded-full border px-4 py-2 text-[11px] font-bold transition ${filter === item ? 'border-[#173b21] bg-[#173b21] text-white' : 'border-[#e0e6dd] bg-white text-[#415247] hover:bg-[#eef2e8]'}`}>{item}{item === 'Todos' ? ` ${orders.length}` : item === 'Em andamento' ? ` ${inProgress}` : item === 'Aguardando ação' ? ` ${waiting}` : item === 'Concluídos' ? ` ${done}` : ''}</button>)}</div>
+          <div className="mt-3 flex flex-wrap gap-2">{filters.map((item) => <button key={item} onClick={() => setFilter(item)} className={`rounded-full border px-4 py-2 text-[11px] font-bold transition ${filter === item ? 'border-[#173b21] bg-[#173b21] text-white' : 'border-[#e0e6dd] bg-white text-[#415247] hover:bg-[#eef2e8]'}`}>{item}{item === 'Todos' ? ` ${orders.length}` : item === 'Em andamento' ? ` ${inProgress}` : item === 'Negociando' ? ` ${negotiating}` : item === 'Concluídos' ? ` ${done}` : ''}</button>)}</div>
           <div className="mt-4 overflow-x-auto rounded-[20px] border border-[#e0e6dd] bg-white">
-            <table className="w-full min-w-[720px] text-left"><thead className="bg-[#eef2e8] text-[10px] font-bold uppercase text-[#708077]"><tr><th className="px-4 py-3">Produto</th><th className="px-3 py-3">Pedido</th><th className="px-3 py-3">Volume</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Atualização</th><th className="px-3 py-3" aria-label="Detalhes" /></tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id} className="border-t border-[#e9ede7] text-xs"><td className="px-4 py-3"><div className="flex items-center gap-3"><img src={order.image} alt="" className="size-12 rounded-lg object-cover" /><div><strong className="block font-bold">{order.name}</strong><small className="text-[10px] text-[#708077]">{order.supplier}</small></div></div></td><td className="px-3 py-3 font-semibold">{order.id}</td><td className="px-3 py-3 text-[#708077]">{order.volume}</td><td className="px-3 py-3 font-bold">{order.total}</td><td className="px-3 py-3"><span className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[9px] font-extrabold ${order.status === 'Concluído' ? 'bg-[#e2f5e7] text-[#287a48]' : order.status === 'Aguardando ação' ? 'bg-[#fff0d8] text-[#ad6a15]' : 'bg-[#e3f2f5] text-[#34788b]'}`}>{order.status.toUpperCase()}</span></td><td className="px-3 py-3 text-[11px] text-[#708077]">{order.updated}</td><td className="px-3 py-3"><button onClick={() => setSelected(order)} aria-label={`Ver detalhes de ${order.name}`} className="rounded-lg bg-[#f0f4eb] p-2 hover:bg-[#e1efce]"><ArrowRight size={15} /></button></td></tr>)}</tbody></table>
+            <table className="w-full min-w-[720px] text-left"><thead className="bg-[#eef2e8] text-[10px] font-bold uppercase text-[#708077]"><tr><th className="px-4 py-3">Produto</th><th className="px-3 py-3">Pedido</th><th className="px-3 py-3">Volume</th><th className="px-3 py-3">Total</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Atualização</th><th className="px-3 py-3" aria-label="Detalhes" /></tr></thead><tbody>{visibleOrders.map((order) => <tr key={order.id} className="border-t border-[#e9ede7] text-xs"><td className="px-4 py-3"><div className="flex items-center gap-3"><img src={order.image} alt="" className="size-12 rounded-lg object-cover" /><div><strong className="block font-bold">{order.name}</strong><small className="text-[10px] text-[#708077]">{order.supplier}</small></div></div></td><td className="px-3 py-3 font-semibold">{order.id}</td><td className="px-3 py-3 text-[#708077]">{order.volume}</td><td className="px-3 py-3 font-bold">{order.total}</td><td className="px-3 py-3"><span className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[9px] font-extrabold ${order.status === 'Concluído' ? 'bg-[#e2f5e7] text-[#287a48]' : order.status === 'Negociando' ? 'bg-[#fff0d8] text-[#ad6a15]' : order.status === 'Aguardando transporte' ? 'bg-[#e8f5ce] text-[#287a48]' : 'bg-[#e3f2f5] text-[#34788b]'}`}>{order.status.toUpperCase()}</span></td><td className="px-3 py-3 text-[11px] text-[#708077]">{order.updated}</td><td className="px-3 py-3"><button onClick={() => setSelected(order)} aria-label={`Ver detalhes de ${order.name}`} className="rounded-lg bg-[#f0f4eb] p-2 hover:bg-[#e1efce]"><ArrowRight size={15} /></button></td></tr>)}</tbody></table>
             {visibleOrders.length === 0 && <p className="p-8 text-center text-sm text-[#708077]">{loading ? 'Carregando pedidos...' : error ? error : 'Nenhum pedido nesta categoria.'}</p>}
           </div>
         </section>
       </main>
-      {selected && <OrderDetailsModal order={selected} onClose={() => setSelected(null)} onUpdated={() => { setSelected(null); void fetchOrders(true) }} />}
+      {selected && <OrderDetailsModal order={selected} onClose={() => setSelected(null)} />}
     </div>
   )
 }
 
-function OrderDetailsModal({ order, onClose, onUpdated }: { order: Order; onClose: () => void; onUpdated: () => void }) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+function OrderDetailsModal({ order, onClose }: { order: Order; onClose: () => void }) {
   const proposal = order.backend.proposta
-  const counter = proposal?.contrapropostas[0]
-  const canAnswer = counter?.status === 'PENDENTE'
-
-  async function answer(decision: 'accept' | 'reject') {
-    if (!counter) return
-    setBusy(true)
-    setError('')
-    try {
-      if (decision === 'accept') await proposalService.acceptCounter(counter.id)
-      else await proposalService.rejectCounter(counter.id)
-      onUpdated()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar a negociação.')
-    } finally {
-      setBusy(false)
-    }
-  }
+  const stages = [
+    { label: 'Aberto', active: true },
+    { label: 'Negociando', active: true },
+    { label: 'Fechado', active: ['FECHADO', 'EM_TRANSPORTE', 'ENTREGUE'].includes(order.backend.status) },
+    { label: 'Em transporte', active: ['EM_TRANSPORTE', 'ENTREGUE'].includes(order.backend.status) },
+    { label: 'Entregue', active: order.backend.status === 'ENTREGUE' },
+  ]
 
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation" onClick={onClose}>
     <section role="dialog" aria-modal="true" aria-label="Detalhes do pedido" onClick={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
@@ -140,9 +125,21 @@ function OrderDetailsModal({ order, onClose, onUpdated }: { order: Order; onClos
         <p><span className="block text-[10px] uppercase text-[#708077]">Total</span><strong>{order.total}</strong></p>
         <p className="col-span-2"><span className="block text-[10px] uppercase text-[#708077]">Entrega</span><strong>{order.backend.endereco_entrega}</strong></p>
       </div>
+      <div className="mt-6 rounded-xl bg-[#f7f8f3] p-4">
+        <p className="text-xs font-bold uppercase tracking-wide text-[#708077]">Acompanhamento do pedido</p>
+        <div className="mt-5 grid grid-cols-5 gap-1">
+          {stages.map((stage, index) => (
+            <div key={stage.label} className="relative text-center">
+              <span className={`mx-auto grid size-6 place-items-center rounded-full text-[10px] font-bold ${stage.active ? 'bg-[#2d6922] text-white' : 'bg-[#e0e6dd] text-[#708077]'}`}>
+                {index + 1}
+              </span>
+              <p className={`mt-2 text-[9px] ${stage.active ? 'font-bold text-[#102217]' : 'text-[#9aa79b]'}`}>{stage.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
       {order.backend.frete && <div className="mt-5 rounded-xl bg-[#eef6e9] p-4 text-sm"><strong>Logística</strong><p className="mt-2">Frete {order.backend.frete.codigo} · {order.backend.frete.status}</p><p className="mt-1 text-xs text-[#708077]">Transportador: {order.backend.frete.transportador?.nome ?? 'Aguardando atribuição'}</p></div>}
-      {proposal && <div className="mt-5 rounded-xl border border-[#e0e6dd] p-4 text-sm"><strong>Negociação</strong><p className="mt-2">Sua proposta: {brl(Number(proposal.preco))} por unidade</p>{counter && <><p className="mt-1">Contraproposta do produtor: <strong>{brl(Number(counter.preco_contraproposta))}</strong></p>{counter.mensagem && <p className="mt-2 rounded-lg bg-[#f7f8f3] p-3 text-xs">{counter.mensagem}</p>}</>}{canAnswer ? <div className="mt-4 flex gap-2"><button disabled={busy} onClick={() => answer('reject')} className="flex-1 rounded-lg border border-[#e0e6dd] px-3 py-2 text-xs font-bold text-[#a94843]">Recusar</button><button disabled={busy} onClick={() => answer('accept')} className="flex-1 rounded-lg bg-[#2d6922] px-3 py-2 text-xs font-bold text-white">Aceitar contraproposta</button></div> : <p className="mt-3 text-xs text-[#708077]">Esta negociação não aguarda uma ação sua.</p>}</div>}
-      {error && <p role="alert" className="mt-3 text-xs text-red-600">{error}</p>}
+      {proposal && <div className="mt-5 rounded-xl border border-[#e0e6dd] p-4 text-sm"><strong>Negociação</strong><p className="mt-2">Sua proposta: {brl(Number(proposal.preco))} por unidade</p><p className="mt-3 text-xs text-[#708077]">Para responder ou fazer uma nova proposta, acesse a área de negociações.</p><Link to="/comprador/negociacoes" onClick={onClose} className="mt-4 inline-flex rounded-lg bg-[#2d6922] px-4 py-2 text-xs font-bold text-white">Ir para negociações</Link></div>}
     </section>
   </div>
 }

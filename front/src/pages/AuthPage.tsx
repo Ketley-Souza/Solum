@@ -13,9 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import heroImage from "../assets/hero.jpg";
-import logoImage from "../assets/logo.svg";
 import type { CadastroPayload, LoginPayload, Profile, AuthMode } from "../types/auth";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,23 +266,18 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
   );
 
   return (
-    <div className="min-h-screen bg-[#f0ede6] font-['Manrope'] text-[#0b150c]">
-      {/* Header */}
-      <header className="flex items-center justify-between px-5 py-4 sm:px-8 lg:px-[5.5%]">
-        <Link to="/" aria-label="Solum início" className="flex items-center gap-2.5 text-[#15371e] transition-opacity hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]">
-          <img src={logoImage} alt="" className="size-8" />
-          <span>
-            <strong className="block font-serif text-lg leading-none">SOLUM</strong>
-            <small className="mt-0.5 block text-[8px] font-extrabold tracking-widest text-[#4a5d4e]">AGRICULTURAL B2B</small>
-          </span>
-        </Link>
-      </header>
-
+    <div className="relative min-h-screen overflow-hidden bg-[#f3f8f0] font-['Manrope'] text-[#0b150c]">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_20%,rgba(151,190,116,0.2),transparent_30%),radial-gradient(circle_at_84%_18%,rgba(82,139,88,0.17),transparent_28%),linear-gradient(135deg,#f8fbf6_0%,#edf4ea_48%,#f3f8f0_100%)]" />
+        <div className="absolute -left-24 top-16 size-72 rounded-full bg-[#a8c98a]/30 blur-3xl" />
+        <div className="absolute bottom-[-120px] right-[-80px] size-96 rounded-full bg-[#5f9968]/22 blur-3xl" />
+        <div className="absolute right-[18%] top-[18%] size-32 rounded-full border border-white/70 bg-[#dbead7]/35 blur-sm" />
+      </div>
       {/* Two-column layout */}
-      <div className="mx-auto grid w-full max-w-[1200px] items-stretch gap-6 px-5 pb-12 sm:px-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.1fr)] lg:gap-7 lg:px-10">
+      <div className="relative z-10 mx-auto grid w-full max-w-[1200px] items-stretch gap-6 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.1fr)] lg:gap-7 lg:px-10">
 
         {/* LEFT — hero panel */}
-        <div className="relative hidden overflow-hidden rounded-[1.75rem] lg:flex lg:flex-col lg:justify-between">
+        <div className="relative z-10 hidden overflow-hidden rounded-[1.75rem] shadow-[0_16px_38px_rgba(15,30,18,.12)] lg:flex lg:flex-col lg:justify-between">
           <div className="absolute inset-0 bg-cover bg-center"
             style={{ backgroundImage: `linear-gradient(180deg, rgba(10,28,14,.55) 0%, rgba(10,28,14,.35) 40%, rgba(10,28,14,.82) 100%), url(${heroImage})` }} />
           <div className="relative z-10 flex h-full flex-col justify-between p-8 text-white xl:p-10">
@@ -310,7 +303,7 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
           </div>
         </div>
 
-        <div className="flex w-full flex-col rounded-[1.75rem] bg-white p-6 shadow-[0_8px_40px_rgba(15,30,18,.09)] sm:p-8">
+        <div className="relative z-10 flex w-full flex-col rounded-[1.75rem] bg-white p-6 shadow-[0_16px_38px_rgba(15,30,18,.12)] sm:p-8">
 
           {sharedTop}
 

@@ -71,7 +71,7 @@ export default function ProfilePage({ profile }: { profile: Profile }) {
 
   function handleLogout() {
     resetAllStores();
-    navigate("/login", { replace: true });
+    navigate("/", { replace: true });
   }
 
   return (

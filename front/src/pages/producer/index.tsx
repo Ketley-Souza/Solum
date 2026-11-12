@@ -7,6 +7,10 @@ import { selectMyOffers, useOfferStore } from "../../stores/offerStore";
 import { selectOrders, useOrderStore } from "../../stores/orderStore";
 import { proposalService, type BackendProposal } from "../../services/proposalService";
 import { notificationService } from "../../services/notificationService";
+import cafeImage from "../../assets/offer-cafe.png";
+import milhoImage from "../../assets/offer-milho.jpg";
+import sojaImage from "../../assets/offer-soja.jpg";
+import algodaoImage from "../../assets/offer-algodao.jpg";
 
 const navigation = [
   { label: "Visão geral", href: "/produtor" },
@@ -19,6 +23,20 @@ const currency = (value: number) => value.toLocaleString("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
+
+function getOfferImage(category: string, imageUrl?: string | null) {
+  if (imageUrl) return imageUrl;
+  if (category === "Milho") return milhoImage;
+  if (category === "Soja") return sojaImage;
+  if (category === "Feijão") return algodaoImage;
+  return cafeImage;
+}
+
+function getStatusBadge(status: "Ativa" | "Em negociação" | "Encerrada") {
+  if (status === "Em negociação") return "bg-[#fff0d7] text-[#a6680a]";
+  if (status === "Encerrada") return "bg-[#fde8e7] text-[#bf4440]";
+  return "bg-[#e3f5e9] text-[#23804b]";
+}
 
 export default function ProducerPage() {
   const user = useAuthStore((state) => state.user);
@@ -38,10 +56,19 @@ export default function ProducerPage() {
       .catch(() => setUnreadNotifications(0));
   }, [fetchOffers, fetchOrders, setProposals, setUnreadNotifications]);
 
-  const activeOffers = offers.filter((offer) => offer.status === "ATIVA").length;
   const openProposals = proposals.filter((proposal) =>
     proposal.status === "PENDENTE" || proposal.status === "CONTRAPROPOSTA"
   );
+  const receivedProposals = (offerId: string) => proposals.filter((proposal) =>
+    proposal.oferta.id === offerId &&
+    (proposal.status === "PENDENTE" || proposal.status === "CONTRAPROPOSTA" || proposal.status === "ACEITA")
+  );
+  const getDashboardStatus = (offer: typeof offers[number]) => {
+    if (offer.status === "ENCERRADA") return "Encerrada" as const;
+    if (receivedProposals(offer.id).length > 0) return "Em negociação" as const;
+    return "Ativa" as const;
+  };
+  const activeOffers = offers.filter((offer) => getDashboardStatus(offer) === "Ativa").length;
   const negotiatedVolume = orders
     .filter((order) => order.status !== "ABERTO" && order.status !== "NEGOCIANDO")
     .reduce((total, order) => total + Number(order.preco_final) * Number(order.quantidade_final), 0);
@@ -96,16 +123,35 @@ export default function ProducerPage() {
             ) : (
               <div className="space-y-3">
                 {recentOffers.map((offer) => (
-                  <article key={offer.id} className="flex flex-wrap items-center gap-4 rounded-xl bg-[#f7f8f5] p-4">
+                  (() => {
+                    const offerProposals = receivedProposals(offer.id);
+                    const dashboardStatus = getDashboardStatus(offer);
+                    return (
+                  <article key={offer.id} className="flex flex-wrap items-center gap-4 rounded-xl bg-[#FAFBF8] p-4">
+                    <img
+                      src={getOfferImage(offer.categoria, offer.imagem_url)}
+                      alt={`Imagem de ${offer.produto}`}
+                      className="h-14 w-17 shrink-0 rounded-lg object-cover"
+                    />
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-bold">{offer.produto}</h3>
-                      <p className="mt-1 text-xs text-[#78877d]">{Number(offer.quantidade)} {offer.unidade} • {offer.categoria} • {offer.localizacao}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-bold">{offer.produto}</h3>
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${getStatusBadge(dashboardStatus)}`}>
+                          {dashboardStatus}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-[#78877d]">
+                        {Number(offer.quantidade)} {offer.unidade} • {offer.categoria} • {offer.localizacao}
+                        {offerProposals.length > 0 && ` • ${offerProposals.length} ${offerProposals.length === 1 ? "proposta recebida" : "propostas recebidas"}`}
+                      </p>
                     </div>
                     <div className="text-right">
                       <strong className="text-sm">{currency(Number(offer.preco))}</strong>
-                      <p className="text-xs text-[#78877d]">{offer.status}</p>
+                      <p className="text-xs text-[#78877d]">por {offer.unidade === "Sacas de 60 kg" ? "saca" : offer.unidade.toLowerCase()}</p>
                     </div>
                   </article>
+                    );
+                  })()
                 ))}
               </div>
             )}

@@ -27,6 +27,8 @@ Arquivo: `front/src/pages/buyer/index.tsx`
 
 ### Problemas
 
+
+
 1. **Alta — Ofertas demonstrativas misturadas com ofertas reais**
    - A página combina as ofertas retornadas pelo backend com uma lista fixa local.
    - Os produtos demonstrativos aparecem como se fossem ofertas disponíveis no marketplace.
@@ -205,8 +207,11 @@ Arquivo: `front/src/pages/producer/index.tsx`
 
 ## `/produtor/ofertas` — Minhas ofertas
 
+
 Arquivo: `front/src/pages/producer/offers.tsx`
 
+
+> Status: os seis pontos abaixo foram corrigidos ou já estavam atendidos em `front/src/pages/producer/offers.tsx`.
 ### Problemas
 
 1. **Média — Falha ao carregar propostas é silenciosa**
@@ -240,27 +245,24 @@ Arquivo: `front/src/pages/producer/negotiations.tsx`
 
 ### Problemas
 
-1. **Média — Contador de notificações fixo**
-   - A navbar usa `notificationCount={2}`.
-   - O número pode não refletir as notificações reais.
 
-2. **Média — Localização do comprador não é carregada**
+1. **Média — Localização do comprador não é carregada**
    - A conversão usa `Localização não informada`.
    - A tela poderia exibir dados disponíveis do pedido ou do perfil, quando aplicável.
 
-3. **Média — Prazo padrão não representa necessariamente o backend**
+2. **Média — Prazo padrão não representa necessariamente o backend**
    - Quando não há contraproposta, o prazo aparece como `24 horas`.
    - Esse prazo não é calculado a partir de uma data real de expiração.
 
-4. **Média — Mensagens da negociação são reconstruídas de forma limitada**
+3. **Média — Mensagens da negociação são reconstruídas de forma limitada**
    - A timeline é montada com textos genéricos.
    - Não representa necessariamente todo o histórico de ações.
 
-5. **Baixa — Ação de contraproposta restringe o preço sem explicação suficiente**
+4. **Baixa — Ação de contraproposta restringe o preço sem explicação suficiente**
    - O produtor só pode informar valor entre o preço proposto e o preço original.
    - A regra precisa ser apresentada claramente para evitar dúvida sobre o motivo do bloqueio.
 
-6. **Baixa — Modal/detalhe precisa de melhorias de teclado**
+5. **Baixa — Modal/detalhe precisa de melhorias de teclado**
    - Verificar foco inicial, tecla `Escape`, foco preso e retorno ao item selecionado.
 
 ---
@@ -271,23 +273,8 @@ Arquivo: `front/src/pages/producer/orders.tsx`
 
 ### Problemas
 
-1. **Média — Contador de notificações fixo**
-   - A navbar usa `notificationCount={2}`.
+>Corrigidos /pedidos
 
-2. **Média — Falhas de atualização da contraproposta dependem de mensagem local**
-   - O estado de erro existe, mas não há uma revalidação geral da tela após todas as mutações.
-
-3. **Média — Pedido sem proposta e pedido negociado não são diferenciados visualmente o suficiente**
-   - Compras diretas e negociações podem compartilhar a mesma estrutura.
-   - Isso pode dificultar a leitura da origem do pedido.
-
-4. **Baixa — Estágios da operação não incluem orientação contextual**
-   - O status aparece, mas faltam instruções claras sobre a próxima ação possível.
-
-5. **Baixa — Busca e filtros podem perder o contexto da seleção**
-   - Ao alterar filtros, o pedido selecionado pode permanecer apontando para um item que deixou de estar visível.
-
----
 
 ## `/produtor/notificacoes` — Notificações
 
@@ -538,4 +525,3 @@ Aplicável aos modais de ofertas, pedidos, negociações e fretes.
 3. Corrigir datas e períodos exibidos.
 4. Implementar atualização automática ou polling onde fizer sentido.
 5. Melhorar mensagens de vazio, erro e próxima ação.
-

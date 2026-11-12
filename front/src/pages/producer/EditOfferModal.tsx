@@ -1,12 +1,12 @@
 
 import { useState, type FormEvent } from "react";
-import { Pencil, Save, X } from "lucide-react";
+import { ImagePlus, Pencil, Save, X } from "lucide-react";
 import type { NewOffer } from "./CreateOfferModal";
 
 type Props = {
   offer: NewOffer;
   onClose: () => void;
-  onSave: (offer: NewOffer) => void;
+  onSave: (offer: NewOffer) => void | Promise<void>;
 };
 
 const field =
@@ -20,6 +20,7 @@ export default function EditOfferModal({
   onSave,
 }: Props) {
   const [form, setForm] = useState<NewOffer>({ ...offer });
+  const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
 
   function update(
@@ -33,7 +34,7 @@ export default function EditOfferModal({
     setError("");
   }
 
-  function save(event: FormEvent<HTMLFormElement>) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (
@@ -65,11 +66,23 @@ export default function EditOfferModal({
       return;
     }
 
-    onSave({
+    const imageUrl = file ? await readFileAsDataUrl(file) : form.imageUrl;
+    await onSave({
       ...form,
       product: form.product.trim(),
       classification: form.classification.trim(),
       location: form.location.trim(),
+      imageUrl,
+    });
+  }
+
+  function readFileAsDataUrl(selectedFile: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () =>
+        reject(new Error("Não foi possível ler a imagem selecionada."));
+      reader.readAsDataURL(selectedFile);
     });
   }
 
@@ -198,6 +211,30 @@ export default function EditOfferModal({
                   <option value="2027">2027</option>
                 </select>
               </div>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-[#dfe6dd] p-3">
+              <label
+                htmlFor="edit-offer-image"
+                className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-[#2d6922]"
+              >
+                <ImagePlus size={21} />
+                Alterar imagem
+              </label>
+              <input
+                id="edit-offer-image"
+                type="file"
+                accept="image/png,image/jpeg"
+                className="mt-2 block w-full text-xs text-[#78877d] file:mr-3 file:rounded-lg file:border-0 file:bg-[#edf5e8] file:px-3 file:py-2 file:font-semibold file:text-[#2d6922]"
+                onChange={(event) => {
+                  const selectedFile = event.target.files?.[0] ?? null;
+                  setFile(selectedFile);
+                  setError("");
+                }}
+              />
+              <p className="mt-2 text-xs text-[#78877d]">
+                Selecione uma nova imagem para substituir a atual.
+              </p>
             </div>
           </section>
 

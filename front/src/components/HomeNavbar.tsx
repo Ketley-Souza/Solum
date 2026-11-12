@@ -3,7 +3,7 @@ import { ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 export default function HomeNavbar() {
-  const links = [['Início', '#inicio'], ['Marketplace', '#ofertas'], ['Como Funciona', '#como-funciona'], ['Sobre', '#sobre']]
+  const links = [['Início', '#inicio'], ['Ofertas', '#ofertas'], ['Perfis', '#sobre'], ['Como funciona', '#como-funciona']]
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e3e5df] bg-white px-5 py-5 md:h-23.5 md:px-[5.55%]">

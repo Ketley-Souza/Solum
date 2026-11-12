@@ -20,11 +20,12 @@ export type NewOffer = {
   availableUntil: string;
   description: string;
   observations: string;
+  imageUrl?: string;
 };
 
 type Props = {
   onClose: () => void;
-  onCreate: (offer: NewOffer) => void;
+  onCreate: (offer: NewOffer) => void | Promise<void>;
 };
 
 const initialForm = {
@@ -131,8 +132,9 @@ export default function CreateOfferModal({
   }
 
   // Confirmar a publicação
-  function publish() {
-    onCreate({
+  async function publish() {
+    const imageUrl = files[0] ? await readFileAsDataUrl(files[0]) : undefined;
+    await onCreate({
       product: form.product.trim(),
       category: form.category,
       classification: form.classification.trim(),
@@ -145,6 +147,16 @@ export default function CreateOfferModal({
       availableUntil: form.availableUntil,
       description: form.description,
       observations: form.observations,
+      imageUrl,
+    });
+  }
+
+  function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("Não foi possível ler a imagem selecionada."));
+      reader.readAsDataURL(file);
     });
   }
 
@@ -603,8 +615,8 @@ export default function CreateOfferModal({
               </div>
 
               <p className="text-xs text-[#78877d]">
-                Publicação no banco de dados. As imagens selecionadas
-                ainda não serão enviadas ao servidor.
+                A primeira imagem selecionada será enviada e salva junto
+                com a oferta no banco de dados.
               </p>
             </div>
 

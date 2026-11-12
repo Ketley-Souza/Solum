@@ -44,7 +44,7 @@ export const criarOfertaSchema = z.object({
     localizacao: z.string().trim().min(2).max(200),
     periodo: z.string().trim().min(2).max(80),
     descricao: z.string().trim().max(2000).nullish(),
-    imagem_url: z.url('URL de imagem inválida').nullish(),
+    imagem_url: z.string().max(4_000_000).refine((value) => z.url().safeParse(value).success || /^data:image\/(png|jpeg|jpg);base64,/.test(value), 'Imagem inválida.').nullish(),
 });
 export const alterarStatusOfertaSchema = z.object({
     status: z.enum(StatusOferta),

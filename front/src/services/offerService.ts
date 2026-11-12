@@ -33,6 +33,7 @@ export interface NewBackendOffer {
   localizacao: string;
   periodo: string;
   descricao?: string;
+  imagem_url?: string | null;
 }
 
 export interface Offer {

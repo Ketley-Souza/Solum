@@ -6,7 +6,6 @@ import {
 import ProfileNavbar from "../../components/ProfileNavbar";
 import { useAuthStore } from "../../stores/authStore";
 import type { BackendOrder, OrderStatus } from "../../services/orderService";
-import { proposalService } from "../../services/proposalService";
 import { selectOrders, selectOrdersError, selectOrdersLoading, useOrderStore } from "../../stores/orderStore";
 
 type Stage = "Negociando" | "Fechado" | "Em transporte" | "Entregue";
@@ -92,17 +91,11 @@ const phases = ["Aberto", "Negociando", "Fechado", "Em transporte", "Entregue"];
 function stageIndex(stage: Stage) {
   return stage === "Negociando" ? 1 : stage === "Fechado" ? 2 : stage === "Em transporte" ? 3 : 4;
 }
-
 export default function ProducerOrdersPage() {
   const profileName = useAuthStore((state) => state.user?.name ?? "Produtor");
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState<"Todas" | "Em andamento" | "Concluídos">("Todas");
   const [search, setSearch] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
-  const [counterPrice, setCounterPrice] = useState("");
-  const [counterMessage, setCounterMessage] = useState("");
-  const [counterError, setCounterError] = useState("");
-  const [counterSaving, setCounterSaving] = useState(false);
   const backendOrders = useOrderStore(selectOrders);
   const loading = useOrderStore(selectOrdersLoading);
   const error = useOrderStore(selectOrdersError);
@@ -118,6 +111,11 @@ export default function ProducerOrdersPage() {
     const matchesSearch = `${order.id} ${order.product} ${order.buyer}`.toLocaleLowerCase("pt-BR").includes(search.trim().toLocaleLowerCase("pt-BR"));
     return matchesFilter && matchesSearch;
   }), [orders, filter, search]);
+  useEffect(() => {
+    if (!selectedId || !visible.some((order) => order.id === selectedId)) {
+      setSelectedId(visible[0]?.id ?? "");
+    }
+  }, [selectedId, visible]);
 
   function changeFilter(next: typeof filter) {
     setFilter(next);
@@ -127,32 +125,6 @@ export default function ProducerOrdersPage() {
   }
   const currentSelection = visible.find((o) => o.id === selectedId) ?? visible[0] ?? null;
   const display = currentSelection;
-  const canCounter = display?.proposalId && display.proposalStatus === "PENDENTE";
-
-  async function sendCounterproposal() {
-    if (!display?.proposalId || !canCounter) return;
-    const price = Number(counterPrice.replace(",", "."));
-    if (!Number.isFinite(price) || price <= 0) {
-      setCounterError("Informe um preço válido maior que zero.");
-      return;
-    }
-    setCounterSaving(true);
-    setCounterError("");
-    try {
-      await proposalService.counter(display.proposalId, {
-        preco: price,
-        quantidade: display.quantity,
-        mensagem: counterMessage.trim() || undefined,
-      });
-      await fetchOrders(true);
-      setCounterPrice("");
-      setCounterMessage("");
-    } catch (cause) {
-      setCounterError(cause instanceof Error ? cause.message : "Não foi possível enviar a contraproposta.");
-    } finally {
-      setCounterSaving(false);
-    }
-  }
 
   return (
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
@@ -177,9 +149,17 @@ export default function ProducerOrdersPage() {
             ))}
           </div>
           <div className="flex items-center gap-3">
-            {showSearch && <label className="flex items-center gap-2 rounded-lg border border-[#dce4d9] bg-white px-3 py-2"><Search size={15}/><input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} className="w-44 bg-transparent text-sm outline-none" placeholder="Produto, comprador ou pedido" /></label>}
-            <button type="button" onClick={() => { setShowSearch((old) => !old); setSearch(""); }} aria-label="Pesquisar pedidos" className="rounded-lg border border-[#dce4d9] bg-white p-2.5 text-[#5b7760]"><Search size={16}/></button>
-            <span className="text-xs text-[#87938a]">{orders.length} no total</span>
+            <label className="flex items-center gap-2 rounded-lg border border-[#dce4d9] bg-white px-3 py-2">
+              <Search size={15} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} className="w-44 bg-transparent text-sm outline-none" placeholder="Produto, comprador ou pedido" />
+            </label>
+            <button
+              type="button"
+              onClick={() => void fetchOrders(true)}
+              className="rounded-lg border border-[#dce4d9] bg-white px-3 py-2 text-xs font-semibold text-[#5b7760] hover:bg-[#f0f5eb]"
+            >
+              Atualizar
+            </button>
           </div>
         </div>
 
@@ -191,6 +171,7 @@ export default function ProducerOrdersPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] font-extrabold text-[#2d6922]">{order.id}</span><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${stageColors[order.stage]}`}>{order.stage}</span></div>
                 <h3 className="mt-2 text-sm font-extrabold">{order.product}</h3>
                 <p className="mt-1 text-xs text-[#78877d]">{order.buyer} · {order.quantity} {order.unit}</p>
+                <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-[#708077]">{order.proposalId ? "Origem: negociação" : "Origem: compra direta"}</p>
                 <p className="mt-2 text-xs font-bold">{order.stage === "Negociando" ? "Em negociação" : currency(order.price)}</p>
               </button>
             ))}
@@ -198,7 +179,7 @@ export default function ProducerOrdersPage() {
 
           {display && <div className="min-w-0 space-y-3">
             <section className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[11px] font-extrabold uppercase text-[#2d6922]">Pedido {display.id}</p><h2 className="mt-1 text-lg font-extrabold">{display.product} · {display.quantity} sacas</h2></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${stageColors[display.stage]}`}>{display.stage}</span></div>
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-extrabold">{display.product} · {display.quantity} sacas</h2><p className="mt-1 text-xs font-bold uppercase tracking-wide text-[#708077]">{display.proposalId ? "Pedido originado de negociação" : "Compra direta"}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${stageColors[display.stage]}`}>{display.stage}</span></div>
               <ol className="mt-6 grid grid-cols-5 gap-1" aria-label="Etapas do pedido">
                 {phases.map((phase, i) => {
                   const reached = i <= stageIndex(display.stage);
@@ -206,43 +187,6 @@ export default function ProducerOrdersPage() {
                 })}
               </ol>
             </section>
-
-            {display.proposalId && (
-              <section className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-extrabold">Condições da negociação</h3>
-                    <p className="mt-1 text-xs text-[#78877d]">
-                      Proposta do comprador: {currency(display.proposedPrice ?? 0)} por unidade
-                      {display.counterPrice ? ` • Última contraproposta: ${currency(display.counterPrice)}` : ""}
-                    </p>
-                  </div>
-                  <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${display.proposalStatus === "PENDENTE" ? "bg-[#fff0d7] text-[#a6680a]" : "bg-[#edf1e9] text-[#65766a]"}`}>
-                    {display.proposalStatus === "PENDENTE" ? "Aguardando resposta do produtor" : display.proposalStatus}
-                  </span>
-                </div>
-                {display.counterMessage && <p className="mt-3 rounded-lg bg-[#f7f8f3] p-3 text-xs text-[#66776b]">Mensagem anterior: {display.counterMessage}</p>}
-                {canCounter ? (
-                  <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                    <label className="text-xs font-semibold">Novo preço
-                      <input type="number" min="0.01" step="0.01" value={counterPrice} onChange={(event) => setCounterPrice(event.target.value)} className="mt-1 w-full rounded-lg border border-[#dfe5dc] px-3 py-2 text-sm" placeholder="Ex.: 1250,00" />
-                    </label>
-                    <label className="text-xs font-semibold">Mensagem
-                      <input value={counterMessage} onChange={(event) => setCounterMessage(event.target.value)} className="mt-1 w-full rounded-lg border border-[#dfe5dc] px-3 py-2 text-sm" placeholder="Condição para o comprador" />
-                    </label>
-                    <button type="button" disabled={counterSaving} onClick={sendCounterproposal} className="self-end rounded-lg bg-[#2d6922] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-                      {counterSaving ? "Enviando..." : "Enviar contraproposta"}
-                    </button>
-                  </div>
-                ) : display.proposalStatus === "CONTRAPROPOSTA" ? (
-                  <p className="mt-4 rounded-lg bg-[#fff0d7] p-3 text-xs text-[#8a5c13]">Contraproposta enviada. O pedido aguarda a decisão do comprador.</p>
-                ) : (
-                  <p className="mt-4 text-xs text-[#78877d]">Esta negociação já foi encerrada e não permite novas alterações.</p>
-                )}
-                {counterError && <p role="alert" className="mt-3 text-xs text-red-600">{counterError}</p>}
-              </section>
-            )}
-
             <div className="grid gap-3 md:grid-cols-2">
               <section className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-extrabold"><Building2 size={17} className="text-[#2d6922]"/> Comprador e carga</h3>
@@ -250,7 +194,7 @@ export default function ProducerOrdersPage() {
               </section>
               <section className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm">
                 <h3 className="mb-4 flex flex-wrap items-center justify-between gap-2 text-sm font-extrabold"><span className="flex items-center gap-2"><Truck size={17} className="text-[#2d6922]"/> Transportador</span><span className={`rounded-full px-2 py-1 text-[10px] ${display.carrier ? "bg-[#e3f5e9] text-[#23804b]" : "bg-[#edf1e9] text-[#65766a]"}`}>{display.carrier ? "Atribuído" : "Não definido"}</span></h3>
-                {display.carrier ? <div className="space-y-3 text-xs"><p><span className="block text-[10px] uppercase text-[#87938a]">Transportador</span><strong>{display.carrier}</strong></p><div className="grid grid-cols-2 gap-2"><p><span className="block text-[10px] uppercase text-[#87938a]">Frete</span><strong>{display.freightCode} · {display.freightStatus}</strong></p><p><span className="block text-[10px] uppercase text-[#87938a]">Veículo</span><strong>{display.vehicle ?? "Não informado"}</strong></p></div></div> : <div className="flex items-start gap-2 rounded-lg bg-[#f7f8f3] p-3 text-xs text-[#66776b]"><Clock3 size={16} className="shrink-0"/> {display.freightStatus ? `Frete ${display.freightStatus.toLowerCase()}. Transportador ainda não atribuído.` : "O frete será criado quando a negociação for aceita."}</div>}
+                {display.carrier ? <div className="space-y-3 text-xs"><p><span className="block text-[10px] uppercase text-[#87938a]">Transportador</span><strong>{display.carrier}</strong></p><div className="grid grid-cols-2 gap-2"><p><span className="block text-[10px] uppercase text-[#87938a]">Frete</span><strong>{display.freightCode} · {display.freightStatus}</strong></p><p><span className="block text-[10px] uppercase text-[#87938a]">Veículo</span><strong>{display.vehicle ?? "Não informado"}</strong></p></div></div> : <div className="flex items-start gap-2 rounded-lg bg-[#f7f8f3] p-3 text-xs text-[#66776b]"><Clock3 size={16} className="shrink-0"/> {display.freightStatus ? `Frete ${display.freightStatus.toLowerCase()}. Transportador ainda não atribuído.` : display.stage === "Fechado" ? "Aguarde uma transportadora aceitar o frete." : "O frete será criado quando a negociação for aceita."}</div>}
               </section>
             </div>
 
