@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { Link } from "react-router-dom";
 import {
-  CalendarDays,
-  MapPin,
+  ArrowRight,
   Search,
-  SlidersHorizontal,
   Truck,
   X,
+  ChevronDown,
 } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
+import { requestJson } from "../../services/http";
 import {
   type Freight,
+  type Vehicle,
 } from "../../services/transportService";
 import { useAuthStore } from "../../stores/authStore";
 import {
@@ -41,36 +44,97 @@ function weight(value: number | string) {
   return Number(value).toLocaleString("pt-BR");
 }
 
-function date(value: string) {
-  return new Date(value).toLocaleDateString("pt-BR");
-}
-
 export default function AvailableFreightsPage() {
   const user = useAuthStore((state) => state.user);
+  const token = useAuthStore((state) => state.token);
+  const dialogRef = useRef<HTMLElement>(null);
+  const busyRef = useRef(false);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   const freights = useFreightStore(useShallow(selectAvailableFreights));
   const vehicles = useFreightStore(selectVehicles);
   const loading = useFreightStore(selectFreightsLoading);
   const storeError = useFreightStore(selectFreightsError);
+  const vehiclesError = useFreightStore((state) => state.vehicles.error);
   const fetchFreights = useFreightStore((state) => state.fetchFreights);
   const fetchVehicles = useFreightStore((state) => state.fetchVehicles);
   const acceptFreightFromStore = useFreightStore((state) => state.acceptFreight);
   const [search, setSearch] = useState("");
+  const [vehicleFilter, setVehicleFilter] = useState("Todos");
+  const [fleetOpen, setFleetOpen] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [cargo, setCargo] = useState("Todas as cargas");
   const [selected, setSelected] = useState<Freight | null>(null);
   const [vehicleId, setVehicleId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [fleetMessage, setFleetMessage] = useState("");
+  const [fleetBusyId, setFleetBusyId] = useState<string | null>(null);
   const displayError = error || storeError;
 
   const load = useCallback(async () => {
-    await Promise.all([fetchFreights("DISPONIVEL"), fetchVehicles()]);
+    // Todas as páginas carregam a lista completa para não reutilizar cache filtrado.
+    await Promise.all([fetchFreights(undefined, true), fetchVehicles(true)]);
   }, [fetchFreights, fetchVehicles]);
 
   useEffect(() => {
     void load();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 60_000);
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
   }, [load]);
+
+  useEffect(() => {
+    if (window.location.hash === "#frota") {
+      setFleetOpen(true);
+      window.setTimeout(() => document.getElementById("frota")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    const dialog = dialogRef.current;
+    dialog?.querySelector<HTMLElement>("select")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busyRef.current) {
+        event.preventDefault();
+        closeModal();
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const elements = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]',
+      )).filter((element) => element.getClientRects().length > 0);
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (!first || !last) return;
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      returnFocusRef.current?.focus();
+    };
+  }, [selected]);
 
   const categories = useMemo(
     () =>
@@ -114,9 +178,45 @@ export default function AvailableFreightsPage() {
       )
     : [];
 
+  function closeModal() {
+    if (busy) return;
+    setSelected(null);
+    setVehicleId("");
+    setError("");
+  }
+
+  function openModal(freight: Freight, trigger: HTMLElement) {
+    returnFocusRef.current = trigger;
+    setSelected(freight);
+    setVehicleId("");
+    setError("");
+    setMessage("");
+  }
+
+  async function deactivateVehicle(vehicle: Vehicle) {
+    if (!token || !window.confirm(`Desativar o veículo ${vehicle.tipo_veiculo} (${weight(vehicle.capacidade_toneladas)} t)?`)) return;
+    setFleetBusyId(vehicle.id);
+    setError("");
+    setFleetMessage("");
+    try {
+      await requestJson<void>(`/veiculos/${encodeURIComponent(vehicle.id)}/desativar`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (vehicleId === vehicle.id) setVehicleId("");
+      await fetchVehicles(true);
+      setFleetMessage("Veículo desativado com sucesso.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível desativar o veículo.");
+    } finally {
+      setFleetBusyId(null);
+    }
+  }
+
   async function acceptFreight() {
     if (!selected || !vehicleId) return;
 
+    busyRef.current = true;
     setBusy(true);
     setError("");
     setMessage("");
@@ -127,7 +227,6 @@ export default function AvailableFreightsPage() {
       setSelected(null);
       setVehicleId("");
       setMessage("Frete aceito com sucesso! Veja em Meus fretes.");
-
       await load();
     } catch (err) {
       setError(
@@ -136,192 +235,85 @@ export default function AvailableFreightsPage() {
           : "Não foi possível aceitar o frete.",
       );
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
+  // O backend não informa tipo de veículo exigido por frete. Os botões do
+  // Figma filtram pela compatibilidade com veículos da frota cadastrada.
+  const displayedFreights = filtered.filter((freight) =>
+    vehicleFilter === "Todos" || vehicles.some((v) =>
+      v.tipo_veiculo.toUpperCase() === vehicleFilter.toUpperCase() &&
+      Number(v.capacidade_toneladas) >= Number(freight.peso_toneladas),
+    ),
+  );
+  const filters = ["Todos", "Bitrem", "Carreta", "Toco", "Truck"];
+
   return (
-    <div className="min-h-screen bg-[#fafaf8] font-['Manrope'] text-[#0b150c]">
-      <ProfileNavbar
-        profileName={user?.name || "Transportador"}
-        role="TRANSPORTADOR"
-        links={links}
-      />
-
-      <main className="mx-auto max-w-[1440px] px-5 py-8 md:px-10 lg:px-12">
-        <p className="text-sm font-extrabold uppercase tracking-wide text-[#548047]">
-          Oportunidades de transporte
-        </p>
-
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+    <div className="min-h-screen bg-[#f8f9f5] font-['Manrope'] text-[#142418]">
+      <ProfileNavbar profileName={user?.name || "Transportador"} role="TRANSPORTADOR" links={links} />
+      <main className="mx-auto max-w-[1280px] px-5 pb-16 pt-8 md:px-12">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="font-['Bricolage_Grotesque'] text-3xl font-extrabold md:text-4xl">
-              Fretes disponíveis
-            </h1>
-            <p className="mt-2 text-sm text-[#66736a]">
-              Encontre cargas que combinam com sua frota.
-            </p>
+            <p className="text-[10px] font-extrabold uppercase tracking-wide text-[#2e7839]">Conta transportador · {freights.length} fretes disponíveis</p>
+            <h1 className="mt-1 font-['Bricolage_Grotesque'] text-[30px] font-extrabold tracking-tight md:text-[32px]">Fretes disponíveis</h1>
+            <p className="mt-1 text-xs text-[#879185]">Encontre cargas que combinam com a capacidade da sua frota.</p>
           </div>
-
-          <span className="rounded-xl bg-[#eaf5e3] px-4 py-3 text-sm font-bold text-[#2f681f]">
-            {filtered.length} frete(s) disponível(is)
-          </span>
+          <Link to="/transportador/meus-fretes" className="inline-flex items-center gap-2 rounded-xl bg-[#285e22] px-5 py-3 text-xs font-bold text-white hover:bg-[#347a2c]">Meus fretes <ArrowRight size={16} /></Link>
         </div>
 
-        <div className="mt-7 flex flex-col gap-3 rounded-2xl border border-[#e5e9e1] bg-white p-4 md:flex-row">
-          <label className="flex flex-1 items-center gap-2 rounded-xl border border-[#e1e6de] px-3 py-3">
-            <Search size={18} className="text-[#718075]" />
-
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por carga, origem ou destino"
-              className="w-full bg-transparent text-sm outline-none"
-            />
-          </label>
-
-          <label className="flex items-center gap-2 rounded-xl border border-[#e1e6de] px-3 py-3">
-            <SlidersHorizontal size={18} className="text-[#718075]" />
-
-            <select
-              value={cargo}
-              onChange={(event) => setCargo(event.target.value)}
-              className="bg-transparent text-sm outline-none"
-            >
-              <option>Todas as cargas</option>
-              {categories.map((category) => (
-                <option key={category}>{category}</option>
-              ))}
-            </select>
-          </label>
-
-          <button
-            onClick={() => void load()}
-            className="rounded-xl border border-[#dfe6da] px-5 py-3 text-sm font-bold hover:bg-[#f4f8ef]"
-          >
-            Atualizar
-          </button>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por tipo de veículo compatível">
+            {filters.map((type) => <button type="button" key={type} aria-pressed={vehicleFilter === type} onClick={() => setVehicleFilter(type)} className={`rounded-full border px-4 py-2 text-[11px] font-bold transition ${vehicleFilter === type ? "border-[#17351f] bg-[#17351f] text-white" : "border-[#e0e7da] bg-white text-[#4f6150] hover:bg-[#eaf4df]"}`}>{type}</button>)}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setShowSearch((v) => !v)} aria-expanded={showSearch} className="inline-flex items-center gap-2 rounded-xl border border-[#dfe6da] bg-white px-3 py-2 text-xs font-bold text-[#355437] hover:bg-[#f2f8eb]"><Search size={14} /> Buscar / filtrar</button>
+            <button type="button" onClick={() => setFleetOpen((v) => !v)} aria-expanded={fleetOpen} aria-controls="frota" className="inline-flex items-center gap-2 rounded-xl border border-[#dfe6da] bg-white px-3 py-2 text-xs font-bold text-[#355437] hover:bg-[#f2f8eb]"><Truck size={15} /> Minha frota <ChevronDown size={14} /></button>
+            <button type="button" onClick={() => void load()} className="rounded-xl border border-[#dfe6da] bg-white px-3 py-2 text-xs font-bold hover:bg-[#f2f8eb]">Atualizar</button>
+          </div>
         </div>
+        {vehicleFilter !== "Todos" && <p className="mt-2 text-[11px] text-[#7d897b]">Exibindo cargas compatíveis com veículos {vehicleFilter} cadastrados na sua frota.</p>}
+        {showSearch && <div className="mt-3 flex flex-wrap gap-3 rounded-xl border border-[#e2eadb] bg-white p-3">
+          <label className="flex flex-1 items-center gap-2 rounded-lg border border-[#e0e7da] px-3 py-2"><Search size={16} className="text-[#81907e]"/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por carga, origem ou destino" className="min-w-[200px] flex-1 bg-transparent text-xs outline-none" /></label>
+          <select aria-label="Filtrar categoria" value={cargo} onChange={(e) => setCargo(e.target.value)} className="rounded-lg border border-[#e0e7da] bg-white px-3 py-2 text-xs"><option>Todas as cargas</option>{categories.map((c) => <option key={c}>{c}</option>)}</select>
+        </div>}
 
-        {displayError && (
-          <p
-            role="alert"
-            className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700"
-          >
-            {displayError}
-          </p>
-        )}
+        {displayError && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-800">{displayError}</p>}
+        {message && <p role="status" className="mt-3 rounded-xl bg-green-50 p-3 text-xs font-bold text-green-800">{message}</p>}
+        {vehiclesError && <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Não foi possível carregar a frota: {vehiclesError}</p>}
+        {vehicles.length === 0 && !vehiclesError && <button type="button" onClick={() => setFleetOpen(true)} className="mt-3 block w-full rounded-xl border border-[#dce6b6] bg-[#eff7dd] px-4 py-3 text-left text-xs text-[#355e25]"><b>Você ainda não tem veículos cadastrados.</b> Clique aqui para cadastrar um antes de aceitar um frete.</button>}
 
-        {message && (
-          <p
-            role="status"
-            className="mt-4 rounded-xl bg-green-50 p-4 text-sm text-green-800"
-          >
-            {message}
-          </p>
-        )}
+        <section className="mt-4 space-y-3" aria-label="Lista de fretes disponíveis">
+          {loading && displayedFreights.length === 0 ? <p className="rounded-xl bg-white p-8 text-center text-xs text-[#82917e]">Carregando fretes...</p> : displayedFreights.length === 0 ? (
+            <div className="rounded-2xl border border-[#e0e7d9] bg-white p-9 text-center"><Truck size={28} className="mx-auto text-[#719266]"/><p className="mt-3 text-sm font-bold">Nenhum frete encontrado</p><p className="mt-1 text-xs text-[#788778]">Ajuste os filtros, cadastre um veículo compatível ou atualize a lista.</p></div>
+          ) : displayedFreights.map((freight, i) => (
+            <article key={freight.id} className="flex min-h-[100px] flex-col gap-3 rounded-2xl border border-[#e0e6dc] bg-white px-4 py-4 shadow-[0_4px_14px_rgba(22,48,25,0.05)] sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div className="flex min-w-0 items-stretch gap-4">
+                <span aria-hidden="true" className={`w-[4px] shrink-0 rounded-full ${i % 4 === 0 ? "bg-[#e98113]" : i % 4 === 2 ? "bg-[#d64343]" : "bg-[#214c2f]"}`} />
+                <div className="min-w-0 py-2"><h2 className="text-sm font-extrabold leading-snug">{freight.endereco_origem} → {freight.endereco_destino}</h2><p className="mt-2 text-[11px] text-[#79867a]">{freight.pedido?.oferta?.produto || "Carga agrícola"} · {weight(freight.peso_toneladas)} ton · {freight.pedido?.oferta?.categoria || "Carga"} · Código {freight.codigo}</p></div>
+              </div>
+              <div className="flex shrink-0 items-center justify-between gap-4 pl-5 sm:pl-0"><div className="text-right"><p className="font-['Bricolage_Grotesque'] text-[20px] font-extrabold text-[#1e3b21]">{money(freight.valor_frete)}</p><p className="text-[10px] text-[#91a08c]">{freight.valor_frete == null ? "Valor não informado" : "Valor registrado"}</p></div><button onClick={(e) => openModal(freight, e.currentTarget)} className="rounded-xl bg-[#bbf139] px-5 py-3 text-xs font-extrabold text-[#16381c] hover:bg-[#d0fa64]">Aceitar</button></div>
+            </article>
+          ))}
+        </section>
+        <p className="mt-3 text-[11px] text-[#7f8c7c]" role="status">{displayedFreights.length} frete(s) encontrado(s) · lista atualizada automaticamente a cada 60 segundos com a aba visível.</p>
 
-        {loading ? (
-          <p className="mt-8 text-center text-sm text-[#718075]">
-            Carregando fretes...
-          </p>
-        ) : filtered.length === 0 ? (
-          <div className="mt-8 rounded-2xl border bg-white p-10 text-center">
-            <Truck
-              size={32}
-              className="mx-auto text-[#719166]"
-            />
-            <h2 className="mt-3 font-bold">
-              Nenhum frete disponível
-            </h2>
-            <p className="mt-2 text-sm text-[#718075]">
-              Tente atualizar ou modificar os filtros.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-6 grid gap-5 lg:grid-cols-2">
-            {filtered.map((freight) => (
-              <article
-                key={freight.id}
-                className="rounded-2xl border border-[#e4e9e1] bg-white p-6 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className="text-xs font-extrabold text-[#65815b]">
-                      {freight.codigo}
-                    </span>
-
-                    <h2 className="mt-2 text-lg font-extrabold">
-                      {freight.pedido?.oferta?.produto ||
-                        "Carga agrícola"}
-                    </h2>
-
-                    <p className="mt-1 text-sm text-[#718075]">
-                      {weight(freight.peso_toneladas)} toneladas
-                    </p>
-                  </div>
-
-                  <span className="rounded-full bg-[#eaf5e3] px-3 py-1 text-xs font-extrabold text-[#2f681f]">
-                    Disponível
-                  </span>
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl bg-[#f4f8ef] p-4">
-                    <p className="text-xs text-[#718075]">Origem</p>
-                    <p className="mt-2 flex items-start gap-2 text-sm font-bold">
-                      <MapPin size={17} className="shrink-0 text-[#46723a]" />
-                      {freight.endereco_origem}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl bg-[#f4f8ef] p-4">
-                    <p className="text-xs text-[#718075]">Destino</p>
-                    <p className="mt-2 flex items-start gap-2 text-sm font-bold">
-                      <MapPin size={17} className="shrink-0 text-[#46723a]" />
-                      {freight.endereco_destino}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-t border-[#edf0e9] pt-4">
-                  <div>
-                    <p className="text-xs text-[#718075]">
-                      Valor do frete
-                    </p>
-                    <p className="mt-1 text-xl font-extrabold text-[#2f681f]">
-                      {money(freight.valor_frete)}
-                    </p>
-                    <p className="mt-2 flex items-center gap-1 text-xs text-[#718075]">
-                      <CalendarDays size={14} />
-                      Publicado em {date(freight.criado_em)}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setSelected(freight);
-                      setVehicleId("");
-                      setError("");
-                    }}
-                    className="rounded-xl bg-[#c1f23c] px-5 py-3 text-sm font-extrabold hover:bg-[#d2f66d]"
-                  >
-                    Ver detalhes e aceitar
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
+        {fleetOpen && <section id="frota" className="mt-5 scroll-mt-6 rounded-2xl border border-[#dfe7d8] bg-white p-5" aria-label="Minha frota">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-['Bricolage_Grotesque'] text-lg font-extrabold">Minha frota</h2><p className="mt-1 text-xs text-[#788779]">Gerencie seus veículos e a capacidade de carga.</p></div><span className="rounded-full bg-[#edf5e6] px-3 py-1 text-xs font-bold text-[#336b30]">{vehicles.length} veículo(s)</span></div>
+          {vehicles.length === 0 ? <p className="mt-4 rounded-xl bg-[#f5f8ed] p-3 text-xs">Nenhum veículo cadastrado.</p> : <div className="mt-4 grid gap-2 md:grid-cols-2">{vehicles.map((vehicle) => <div key={vehicle.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#e2eadb] p-3"><span className="text-xs"><b>{vehicle.tipo_veiculo}</b><span className="block text-[#819081]">Capacidade: {weight(vehicle.capacidade_toneladas)} toneladas</span></span><button type="button" disabled={fleetBusyId !== null || busy} onClick={() => void deactivateVehicle(vehicle)} className="rounded-lg border border-[#e0e6d9] px-3 py-2 text-[11px] font-bold hover:bg-red-50 disabled:opacity-50">{fleetBusyId === vehicle.id ? "Desativando..." : "Desativar"}</button></div>)}</div>}
+          <VehicleForm onCreated={(vehicle) => { setFleetMessage(`Veículo ${vehicle.tipo_veiculo} cadastrado (${weight(vehicle.capacidade_toneladas)} t).`); setError(""); }} />
+          {fleetMessage && <p role="status" className="mt-3 text-xs font-bold text-[#2c7735]">{fleetMessage}</p>}
+        </section>}
       </main>
-
       {selected && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
           <section
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="accept-title"
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
           >
             <div className="flex items-start justify-between">
               <h2 id="accept-title" className="text-xl font-extrabold">
@@ -329,7 +321,9 @@ export default function AvailableFreightsPage() {
               </h2>
 
               <button
-                onClick={() => setSelected(null)}
+                type="button"
+                disabled={busy}
+                onClick={closeModal}
                 aria-label="Fechar"
               >
                 <X size={20} />
@@ -353,16 +347,28 @@ export default function AvailableFreightsPage() {
               >
                 <option value="">Escolha um veículo</option>
 
-                {compatibleVehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.tipo_veiculo} —{" "}
-                    {weight(vehicle.capacidade_toneladas)} t
-                  </option>
-                ))}
+                {vehicles.map((vehicle) => {
+                  const compatible = Number(vehicle.capacidade_toneladas) >= Number(selected.peso_toneladas);
+                  return (
+                    <option key={vehicle.id} value={vehicle.id} disabled={!compatible}>
+                      {vehicle.tipo_veiculo} — {weight(vehicle.capacidade_toneladas)} t
+                      {!compatible ? " (capacidade insuficiente)" : ""}
+                    </option>
+                  );
+                })}
               </select>
             </label>
 
-            <VehicleForm onCreated={() => void load()} />
+            <p className="mt-2 text-xs text-[#718075]">O veículo precisa suportar pelo menos {weight(selected.peso_toneladas)} toneladas. Os veículos incompatíveis aparecem desabilitados.</p>
+
+            <VehicleForm onCreated={(vehicle) => {
+              if (Number(vehicle.capacidade_toneladas) >= Number(selected.peso_toneladas)) {
+                setVehicleId(vehicle.id);
+                setError("");
+              } else {
+                setError(`O veículo ${vehicle.tipo_veiculo} foi cadastrado, mas sua capacidade é insuficiente para este frete.`);
+              }
+            }} />
 
             {compatibleVehicles.length === 0 && (
               <p className="mt-3 text-sm text-amber-700">
@@ -378,8 +384,10 @@ export default function AvailableFreightsPage() {
 
             <div className="mt-6 flex justify-end gap-3">
               <button
-                onClick={() => setSelected(null)}
-                className="rounded-xl border px-4 py-3 text-sm font-bold"
+                type="button"
+                disabled={busy}
+                onClick={closeModal}
+                className="rounded-xl border px-4 py-3 text-sm font-bold disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -402,7 +410,7 @@ export default function AvailableFreightsPage() {
 const vehicleTypes = ["VUC", "TOCO", "TRUCK", "CARRETA", "BITREM", "RODOTREM"];
 
 /** Cadastro de veiculo na frota do transportador (grava no banco). */
-function VehicleForm({ onCreated }: { onCreated: () => void }) {
+function VehicleForm({ onCreated }: { onCreated: (vehicle: Vehicle) => void }) {
   const createVehicleFromStore = useFreightStore((state) => state.createVehicle);
   const [type, setType] = useState("TRUCK");
   const [capacity, setCapacity] = useState("");
@@ -413,10 +421,10 @@ function VehicleForm({ onCreated }: { onCreated: () => void }) {
     setSaving(true);
     setFeedback("");
     try {
-      await createVehicleFromStore(type, Number(capacity.replace(",", ".")));
+      const created = await createVehicleFromStore(type, Number(capacity.replace(",", ".")));
       setCapacity("");
-      setFeedback("Ve\u00edculo cadastrado.");
-      onCreated();
+      setFeedback(`Veículo ${created.tipo_veiculo} cadastrado (${weight(created.capacidade_toneladas)} t).`);
+      onCreated(created);
     } catch (err) {
       setFeedback(err instanceof Error ? err.message : "N\u00e3o foi poss\u00edvel cadastrar o ve\u00edculo.");
     } finally {
@@ -429,6 +437,7 @@ function VehicleForm({ onCreated }: { onCreated: () => void }) {
       <p className="text-sm font-bold">{"Cadastrar novo ve\u00edculo"}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <select
+          aria-label="Tipo do veículo"
           value={type}
           onChange={(event) => setType(event.target.value)}
           className="rounded-xl border border-[#dfe6da] bg-white p-2.5 text-sm"
@@ -438,6 +447,13 @@ function VehicleForm({ onCreated }: { onCreated: () => void }) {
           ))}
         </select>
         <input
+          type="number"
+          id="vehicle-capacity-tonnes"
+          name="vehicle_capacity_tonnes"
+          aria-label="Capacidade do veículo em toneladas"
+          autoComplete="off"
+          min="0"
+          step="any"
           value={capacity}
           onChange={(event) => setCapacity(event.target.value)}
           inputMode="decimal"
