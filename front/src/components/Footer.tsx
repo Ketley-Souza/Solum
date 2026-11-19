@@ -1,18 +1,23 @@
+import { Link } from "react-router-dom";
 import logoImage from "../assets/logo.svg";
 
-function FooterColumn({ title, links }: { title: string; links: string[] }) {
+function FooterColumn({ title, links }: { title: string; links: Array<string | { label: string; to: string }> }) {
+  const linkClass =
+  "mt-3 block text-[13px] text-white/60 transition-colors hover:text-white first:mt-4 last:text-[#c1f23c] last:hover:text-[#d1fa62] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]";
   return (
     <div>
       <h3 className="font-['Bricolage_Grotesque'] text-[15px]">{title}</h3>
-      {links.map((link) => (
-        <a
-          className="mt-3 block text-[13px] text-white/60 transition-colors hover:text-white first:mt-4 last:text-[#c1f23c] last:hover:text-[#d1fa62] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]"
-          href="#inicio"
-          key={link}
-        >
-          {link}
-        </a>
-      ))}
+      {links.map((link) => 
+      typeof link === "string" ? (
+          <a className={linkClass} href="#inicio" key={link}>
+            {link}
+          </a>
+        ) : (
+          <Link className={linkClass} to={link.to} key={link.to}>
+            {link.label}
+          </Link>
+        ),
+      )}
     </div>
   );
 }
@@ -63,7 +68,12 @@ export default function Footer() {
           />
           <FooterColumn
             title="Institucional"
-            links={["Sobre Nós", "FAQ / Dúvidas", "Termos de Uso", "Privacidade"]}
+            links={[
+              "Sobre Nós",
+              "FAQ / Dúvidas",
+              { label: "Termos de Uso", to: "/termos-de-uso" },
+              { label: "Privacidade", to: "/politica-de-privacidade" },
+            ]}
           />
           <FooterColumn
             title="Contato & Suporte"
@@ -76,7 +86,14 @@ export default function Footer() {
           © 2026 Solum Tecnologia Agrícola S.A. Todos os direitos reservados.
           Patos de Minas, Minas Gerais, Brasil.
         </span>
-        <span>Privacidade&nbsp;&nbsp;&nbsp; Termos Gerais</span>
+        <span className="flex gap-5">
+          <Link className="transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]" to="/politica-de-privacidade">
+            Privacidade
+          </Link>
+          <Link className="transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c]" to="/termos-de-uso">
+            Termos de Uso
+          </Link>
+        </span>
       </div>
     </footer>
   );

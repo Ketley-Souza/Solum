@@ -15,6 +15,8 @@ import {
 import { useState } from "react";
 import heroImage from "../assets/hero.jpg";
 import type { CadastroPayload, LoginPayload, Profile, AuthMode } from "../types/auth";
+import LegalModal from "./legal/LegalModal";
+import type { LegalSlug } from "./legal/content";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Profile config
@@ -176,6 +178,7 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
   const [terms, setTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [legalDoc, setLegalDoc] = useState<LegalSlug | null>(null);
 
   const activeProfile = PROFILES.find((p) => p.id === profile)!;
 
@@ -188,9 +191,16 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
     setProfile(p); setNome(""); setDocumento(""); setError(null);
   };
 
+  // Abre o documento em uma janela, sem sair do cadastro (Ctrl + clique abre a página em outra aba)
+  const openLegal = (slug: LegalSlug) => (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    setLegalDoc(slug);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isCriar && !terms) { setError("Você precisa aceitar os Termos de Uso para continuar."); return; }
+    if (isCriar && !terms) { setError("Você precisa aceitar os Termos de Uso e a Política de Privacidade para continuar."); return; }
     if (isCriar && !/[A-Z]/.test(password)) {
       setError("A senha deve conter ao menos uma letra maiúscula.");
       return;
@@ -225,7 +235,7 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
     }
   };
 
-  // ── Shared header + profile selector (same in both modes)
+
   const sharedTop = (
     <>
       {/* Tab toggle */}
@@ -241,7 +251,6 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
         ))}
       </div>
 
-      {/* Title */}
       <div className="mt-6">
         <h2 className="font-['Bricolage_Grotesque'] text-[1.6rem] font-extrabold leading-tight sm:text-[1.85rem]">
           {isCriar ? "Comece pela sua atuação no agro" : "Entre na sua conta"}
@@ -253,7 +262,7 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
         </p>
       </div>
 
-      {/* Profile selector */}
+      {/* Seletor Perfil */}
       <div className="mt-6">
         <p className="text-[10px] font-extrabold uppercase tracking-[.1em] text-[#7a8c7e]">Como você quer usar a Solum?</p>
         <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
@@ -273,7 +282,7 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
         <div className="absolute bottom-[-120px] right-[-80px] size-96 rounded-full bg-[#5f9968]/22 blur-3xl" />
         <div className="absolute right-[18%] top-[18%] size-32 rounded-full border border-white/70 bg-[#dbead7]/35 blur-sm" />
       </div>
-      {/* Two-column layout */}
+      {/* Two-column layout */} 
       <div className="relative z-10 mx-auto grid w-full max-w-[1200px] items-stretch gap-6 px-5 py-8 sm:px-8 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.1fr)] lg:gap-7 lg:px-10">
 
         {/* LEFT — hero panel */}
@@ -327,7 +336,7 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
                   </span>
                 </span>
                 <span className="text-xs leading-5 text-[#677a6c]">
-                  Li e aceito os{" "}<a href="#" className="font-bold text-[#2f681f] hover:underline">Termos de Uso</a>{" "}e a{" "}<a href="#" className="font-bold text-[#2f681f] hover:underline">Política de Privacidade</a>{" "}da Solum.
+                  Li e aceito os{" "}<a href="/termos-de-uso" onClick={openLegal("termos-de-uso")} className="font-bold text-[#2f681f] hover:underline">Termos de Uso</a>{" "}e a{" "}<a href="/politica-de-privacidade" onClick={openLegal("politica-de-privacidade")} className="font-bold text-[#2f681f] hover:underline">Política de Privacidade</a>{" "}da Solum.
                 </span>
               </label>
 
@@ -371,6 +380,14 @@ export default function AuthPage({ initialMode = "criar", onLogin, onCadastro }:
           )}
         </div>
       </div>
+
+      <LegalModal
+        open={legalDoc !== null}
+        slug={legalDoc ?? "termos-de-uso"}
+        onSlugChange={setLegalDoc}
+        onClose={() => setLegalDoc(null)}
+        onAccept={() => { setTerms(true); setError(null); setLegalDoc(null); }}
+      />
     </div>
   );
 }

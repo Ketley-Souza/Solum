@@ -22,6 +22,7 @@ import AvailableFreightsPage from "../pages/carrier/available-freights";
 import MyFreightsPage from "../pages/carrier/my-freights";
 import CarrierHistoryPage from "../pages/carrier/history";
 import ProfilePage from "../pages/ProfilePage";
+import LegalPage from "../pages/legal/LegalPage";
 import { authService } from "../services/authService";
 import { useAuthStore } from "../stores/authStore";
 import { RequireProfile, PROFILE_HOME } from "../components/RequireProfile";
@@ -116,6 +117,8 @@ const router = createBrowserRouter([
       { path: "/", element: <HomePage /> },
       { path: "/login", element: <AuthRoute mode="entrar" /> },
       { path: "/cadastro", element: <AuthRoute mode="criar" /> },
+      { path: "/termos-de-uso", element: <LegalPage slug="termos-de-uso" /> },
+      { path: "/politica-de-privacidade", element: <LegalPage slug="politica-de-privacidade" /> },
 
       // Produtor
       {
