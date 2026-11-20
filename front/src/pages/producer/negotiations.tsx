@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, CheckCircle2, ChevronRight, Clock3, Handshake, Search, Send, SlidersHorizontal, X } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
+import { notificationService } from "../../services/notificationService";
 import { useAuthStore } from "../../stores/authStore";
 import { proposalService, type BackendProposal } from "../../services/proposalService";
 
@@ -11,7 +12,8 @@ type Negotiation = {
   product: string;
   quantity: number;
   buyer: string;
-  city: string;
+  destination: string | null;
+  unit: string;
   originalPrice: number;
   proposedPrice: number;
   status: Status;
@@ -20,7 +22,7 @@ type Negotiation = {
   deadline: string;
   payment: string;
   collection: string;
-  messages: string[];
+  messages: { text: string; date: string }[];
 };
 
 function formatDate(value: string) {
@@ -28,7 +30,8 @@ function formatDate(value: string) {
 }
 
 function toNegotiation(proposal: BackendProposal): Negotiation {
-  const counter = proposal.contrapropostas[0];
+  const counter = proposal.status === "PENDENTE" ? undefined : proposal.contrapropostas[0];
+  const order = proposal.pedido as (NonNullable<BackendProposal["pedido"]> & { endereco_entrega?: string }) | null | undefined;
   const status: Record<BackendProposal["status"], Status> = {
     PENDENTE: "Pendente",
     CONTRAPROPOSTA: "Ativa",
@@ -38,22 +41,23 @@ function toNegotiation(proposal: BackendProposal): Negotiation {
   return {
     id: proposal.id,
     product: proposal.oferta.produto,
-    quantity: Number(proposal.quantidade),
+    quantity: Number(counter?.quantidade_contraproposta ?? proposal.quantidade),
     buyer: proposal.comprador.nome,
-    city: "Localização não informada",
+    destination: order?.endereco_entrega || null,
+    unit: proposal.oferta.unidade,
     originalPrice: Number(proposal.oferta.preco),
     proposedPrice: Number(counter?.preco_contraproposta ?? proposal.preco),
     status: status[proposal.status],
     activity: formatDate(proposal.atualizado_em),
     received: formatDate(proposal.criado_em),
-    deadline: counter ? formatDate(counter.expira_em) : "24 horas",
+    deadline: counter && counter.status === "PENDENTE" ? formatDate(counter.expira_em) : "Não informado pela API",
     payment: "A definir",
     collection: proposal.pedido ? "Pedido criado" : "A definir",
     messages: [
-      "Proposta recebida",
-      ...(counter ? [`Contraproposta: ${currency(Number(counter.preco_contraproposta))}`] : []),
-      ...(proposal.status === "ACEITA" ? ["Proposta aceita"] : []),
-      ...(proposal.status === "RECUSADA" ? ["Proposta recusada"] : []),
+      { text: `Proposta recebida: ${currency(Number(proposal.preco))} — ${proposal.quantidade} ${proposal.oferta.unidade}`, date: formatDate(proposal.criado_em) },
+      ...[...proposal.contrapropostas].reverse().map((c) => ({ text: `Contraproposta: ${currency(Number(c.preco_contraproposta))} — ${c.quantidade_contraproposta} ${proposal.oferta.unidade} (${c.status})${c.mensagem ? ` • ${c.mensagem}` : ""}`, date: formatDate(c.criado_em) })),
+      ...(proposal.status === "ACEITA" ? [{ text: "Proposta aceita", date: formatDate(proposal.atualizado_em) }] : []),
+      ...(proposal.status === "RECUSADA" ? [{ text: "Proposta recusada", date: formatDate(proposal.atualizado_em) }] : []),
     ],
   };
 }
@@ -71,6 +75,16 @@ const input = "w-full rounded-xl border border-[#dfe5dc] bg-white px-3 py-2.5 te
 
 export default function ProducerNegotiationsPage() {
   const profileName = useAuthStore((state) => state.user?.name ?? "Produtor");
+  const [notificationCount, setNotificationCount] = useState<number | undefined>(undefined);
+  const [notificationError, setNotificationError] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try { const items = await notificationService.list(); if (alive) setNotificationCount(items.filter((item) => !item.lida).length); }
+      catch { if (alive) setNotificationError(true); }
+    })();
+    return () => { alive = false; };
+  }, []);
   const [items, setItems] = useState<Negotiation[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -84,6 +98,22 @@ export default function ProducerNegotiationsPage() {
   const [error, setError] = useState("");
   const [withAttention, setWithAttention] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const detailRef = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (selected) detailRef.current?.focus();
+    else if (returnFocus.current) document.getElementById(returnFocus.current)?.focus();
+  }, [selected]);
+  useEffect(() => {
+    if (!action) return;
+    const dialog = dialogRef.current;
+    const previous = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    dialog?.showModal();
+    document.body.style.overflow = "hidden";
+    return () => { dialog?.close(); document.body.style.overflow = previousOverflow; if (previous?.isConnected) previous.focus(); };
+  }, [action]);
 
   async function loadNegotiations() {
     setLoading(true);
@@ -131,8 +161,8 @@ export default function ProducerNegotiationsPage() {
         await proposalService.reject(active.id);
       } else {
       const amount = Number(counter.replace(",", "."));
-      if (!Number.isFinite(amount) || amount < active.proposedPrice || amount > active.originalPrice) {
-        setError(`Informe um preço entre ${currency(active.proposedPrice)} e ${currency(active.originalPrice)}.`);
+      if (!Number.isFinite(amount) || amount <= 0 || amount < Math.min(active.proposedPrice, active.originalPrice) || amount > Math.max(active.proposedPrice, active.originalPrice)) {
+        setError(`Informe um preço positivo entre ${currency(Math.min(active.proposedPrice, active.originalPrice))} e ${currency(Math.max(active.proposedPrice, active.originalPrice))}.`);
         return;
       }
         await proposalService.counter(active.id, {
@@ -154,10 +184,11 @@ export default function ProducerNegotiationsPage() {
       profileName={profileName}
       role="PRODUTOR"
       links={nav}
-      notificationCount={2}
+      notificationCount={notificationCount}
       notificationsHref="/produtor/notificacoes"
     />
-    <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
+    {notificationError && <p role="status" className="mx-auto max-w-7xl px-5 pt-3 text-xs text-red-700">Contador de notificações indisponível.</p>}
+      <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
       {!active ? <>
         <p className="mb-1 text-xs font-bold uppercase text-[#2d6922]">Área do produtor</p>
         <h1 className="text-3xl font-extrabold tracking-tight">Negociações</h1>
@@ -178,35 +209,35 @@ export default function ProducerNegotiationsPage() {
         </div>
         <section className="overflow-hidden rounded-2xl border border-[#dfe5dc] bg-white shadow-sm">
           <div className="flex justify-between border-b border-[#e5e9e3] px-5 py-5 text-xs"><strong>{visible.length} negociações</strong><span className="text-[#87938a]">Mais recentes</span></div>
-          {loading ? <p className="p-12 text-center text-sm text-[#78877d]">Carregando negociações...</p> : loadError ? <p role="alert" className="p-12 text-center text-sm text-red-600">{loadError}</p> : visible.length === 0 ? <p className="p-12 text-center text-sm text-[#78877d]">Nenhuma negociação encontrada.</p> : visible.map((n) => <button key={n.id} type="button" onClick={() => setSelected(n.id)} className="flex w-full flex-wrap items-center gap-4 border-b border-[#e5e9e3] px-4 py-5 text-left last:border-b-0 hover:bg-[#fafbf8] md:flex-nowrap">
+          {loading ? <p className="p-12 text-center text-sm text-[#78877d]">Carregando negociações...</p> : loadError ? <p role="alert" className="p-12 text-center text-sm text-red-600">{loadError}</p> : visible.length === 0 ? <p className="p-12 text-center text-sm text-[#78877d]">Nenhuma negociação encontrada.</p> : visible.map((n) => <button key={n.id} type="button" id={`neg-${n.id}`} onClick={() => { returnFocus.current = `neg-${n.id}`; setSelected(n.id); }} className="flex w-full flex-wrap items-center gap-4 border-b border-[#e5e9e3] px-4 py-5 text-left last:border-b-0 hover:bg-[#fafbf8] md:flex-nowrap">
             <span className="rounded-xl bg-[#edf5e8] p-3 text-[#2d6922]"><Handshake size={19}/></span>
-            <span className="min-w-0 flex-1"><strong className="block text-sm">{n.product} • {n.quantity} sacas</strong><span className="mt-1 block text-xs text-[#87938a]">{n.id} • {n.buyer}</span></span>
-            <span className="w-32"><span className="block text-[10px] text-[#87938a]">PROPOSTA</span><strong className="text-sm">{currency(n.proposedPrice)}/saca</strong></span>
+            <span className="min-w-0 flex-1"><strong className="block text-sm">{n.product} • {n.quantity} {n.unit}</strong><span className="mt-1 block text-xs text-[#87938a]">{n.id} • {n.buyer}</span></span>
+            <span className="w-32"><span className="block text-[10px] text-[#87938a]">PROPOSTA</span><strong className="text-sm">{currency(n.proposedPrice)}/{n.unit}</strong></span>
             <span className="w-28"><span className="block text-[10px] text-[#87938a]">ÚLTIMA ATIVIDADE</span><span className="text-xs">{n.activity}</span></span>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${colors[n.status]}`}>{n.status}</span><ChevronRight size={17} className="text-[#78877d]"/>
           </button>)}
         </section>
       </> : <>
-        <button onClick={() => setSelected(null)} className="mb-3 flex items-center gap-2 text-xs font-bold text-[#2d6922]"><ArrowLeft size={15}/> Voltar</button>
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold text-[#2d6922]">NEGOCIAÇÃO {active.id}</p><h1 className="mt-1 text-3xl font-extrabold">Proposta para {active.product}</h1><p className="mt-2 text-sm text-[#78877d]">Recebida: {active.received} • Responder até {active.deadline}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${colors[active.status]}`}>{active.status}</span></div>
+        <button ref={detailRef} onClick={() => setSelected(null)} className="mb-3 flex items-center gap-2 text-xs font-bold text-[#2d6922]"><ArrowLeft size={15}/> Voltar</button>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold text-[#2d6922]">NEGOCIAÇÃO {active.id}</p><h1 className="mt-1 text-3xl font-extrabold">Proposta para {active.product}</h1><p className="mt-2 text-sm text-[#78877d]">Recebida: {active.received} • Prazo: {active.deadline}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${colors[active.status]}`}>{active.status}</span></div>
         <div className="mt-5 grid items-start gap-4 lg:grid-cols-[2fr_1fr]">
           <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm"><div><strong className="block">{active.buyer}</strong><span className="text-xs text-[#78877d]">Comprador • {active.city}</span></div><span className="rounded-full bg-[#e3f5e9] px-3 py-1 text-xs font-bold text-[#287a48]">Comprador cadastrado</span></div>
-            <div className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm"><h2 className="mb-4 text-base font-extrabold">Proposta recebida</h2><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-[#dfe5dc] bg-[#fafbf8] p-4"><p className="text-xs text-[#78877d]">PREÇO ANUNCIADO</p><strong>{currency(active.originalPrice)}/saca</strong><p className="mt-3 text-xs text-[#78877d]">TOTAL</p><span>{currency(active.originalPrice * active.quantity)}</span></div><div className="rounded-xl bg-[#e8f4cc] p-4"><p className="text-xs text-[#557046]">PREÇO PROPOSTO</p><strong className="text-lg text-[#1d4818]">{currency(active.proposedPrice)}/saca</strong><p className="mt-3 text-xs text-[#557046]">TOTAL</p><span>{currency(active.proposedPrice * active.quantity)}</span></div></div>
+            <div className="flex items-center justify-between rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm"><div><strong className="block">{active.buyer}</strong><span className="text-xs text-[#78877d]">Comprador cadastrado{active.destination ? ` • Destino do pedido: ${active.destination}` : " • Localização não disponibilizada pela API"}</span></div><span className="rounded-full bg-[#e3f5e9] px-3 py-1 text-xs font-bold text-[#287a48]">Comprador cadastrado</span></div>
+            <div className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm"><h2 className="mb-4 text-base font-extrabold">Proposta recebida</h2><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-[#dfe5dc] bg-[#fafbf8] p-4"><p className="text-xs text-[#78877d]">PREÇO ANUNCIADO</p><strong>{currency(active.originalPrice)}/{active.unit}</strong><p className="mt-3 text-xs text-[#78877d]">TOTAL</p><span>{currency(active.originalPrice * active.quantity)}</span></div><div className="rounded-xl bg-[#e8f4cc] p-4"><p className="text-xs text-[#557046]">PREÇO PROPOSTO</p><strong className="text-lg text-[#1d4818]">{currency(active.proposedPrice)}/{active.unit}</strong><p className="mt-3 text-xs text-[#557046]">TOTAL</p><span>{currency(active.proposedPrice * active.quantity)}</span></div></div>
               <div className="mt-3 flex justify-between rounded-xl bg-[#fff0d7] px-4 py-3 text-xs font-semibold text-[#a6680a]"><span>Diferença para o valor anunciado</span><span>{((active.proposedPrice / active.originalPrice - 1) * 100).toFixed(1).replace(".", ",")}% • {currency((active.proposedPrice - active.originalPrice) * active.quantity)}</span></div>
-              <div className="mt-4 grid grid-cols-3 gap-3 text-xs"><div><p className="text-[#78877d]">QUANTIDADE</p><strong>{active.quantity} sacas</strong></div><div><p className="text-[#78877d]">PAGAMENTO</p><strong>{active.payment}</strong></div><div><p className="text-[#78877d]">RETIRADA SUGERIDA</p><strong>{active.collection}</strong></div></div></div>
+              <div className="mt-4 grid grid-cols-3 gap-3 text-xs"><div><p className="text-[#78877d]">QUANTIDADE</p><strong>{active.quantity} {active.unit}</strong></div><div><p className="text-[#78877d]">PAGAMENTO</p><strong>{active.payment}</strong></div><div><p className="text-[#78877d]">RETIRADA SUGERIDA</p><strong>{active.collection}</strong></div></div></div>
             {canRespond && <div className="grid gap-2 sm:grid-cols-3"><button onClick={() => openAction("reject")} className="rounded-xl border border-[#dfe5dc] bg-white px-4 py-3 text-sm font-semibold">Recusar</button><button onClick={() => openAction("counter")} className="rounded-xl border border-[#dfe5dc] bg-white px-4 py-3 text-sm font-semibold">Fazer contraproposta</button><button onClick={() => openAction("accept")} className="rounded-xl bg-[#2d6922] px-4 py-3 text-sm font-semibold text-white">Aceitar proposta</button></div>}
           </div>
-          <aside className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm"><h2 className="mb-5 text-lg font-extrabold">Histórico</h2><div className="space-y-5">{active.messages.map((m, i) => <div key={`${i}-${m}`} className="flex items-start gap-3"><span className="rounded-full bg-[#edf5e8] p-1 text-[#2d6922]"><CheckCircle2 size={15}/></span><div><p className="text-xs font-semibold">{m}</p><p className="mt-1 text-[11px] text-[#78877d]">{i === active.messages.length - 1 ? active.activity : "Registrado no banco"}</p></div></div>)}</div></aside>
+          <aside className="rounded-2xl border border-[#dfe5dc] bg-white p-5 shadow-sm"><h2 className="mb-5 text-lg font-extrabold">Histórico disponível na API</h2><div className="space-y-5">{active.messages.map((m, i) => <div key={`${i}-${m.text}`} className="flex items-start gap-3"><span className="rounded-full bg-[#edf5e8] p-1 text-[#2d6922]"><CheckCircle2 size={15}/></span><div><p className="text-xs font-semibold">{m.text}</p><p className="mt-1 text-[11px] text-[#78877d]">{m.date}</p></div></div>)}</div></aside>
         </div>
       </>}
     </main>
-    {action && active && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#102217]/70 p-4"><div role="dialog" aria-modal="true" aria-labelledby="action-title" className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"><div className="flex items-start justify-between border-b border-[#e5e9e3] p-5"><div><h2 id="action-title" className={`text-xl font-extrabold ${action === "reject" ? "text-[#bf4440]" : ""}`}>{action === "accept" ? "Aceitar esta proposta?" : action === "reject" ? "Recusar proposta" : "Fazer contraproposta"}</h2><p className="mt-1 text-xs text-[#78877d]">{active.buyer} • {active.product}</p></div><button aria-label="Fechar" onClick={() => setAction(null)}><X size={18}/></button></div>
-      <div className="space-y-4 p-5"><div className="rounded-xl bg-[#f7f8f3] p-4 text-sm"><p>Preço anunciado: <strong>{currency(active.originalPrice)}/saca</strong></p><p className="mt-2">Proposta recebida: <strong>{currency(active.proposedPrice)}/saca</strong></p><p className="mt-2">Quantidade: <strong>{active.quantity} sacas</strong></p></div>
+    {action && active && <dialog ref={dialogRef} onCancel={(event) => { event.preventDefault(); setAction(null); }} aria-labelledby="action-title" aria-describedby="action-description" className="fixed inset-0 m-auto max-h-[94vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl bg-white text-[#102217] shadow-2xl backdrop:bg-[#102217]/70"><div className="flex items-start justify-between border-b border-[#e5e9e3] p-5"><div><h2 id="action-title" className={`text-xl font-extrabold ${action === "reject" ? "text-[#bf4440]" : ""}`}>{action === "accept" ? "Aceitar esta proposta?" : action === "reject" ? "Recusar proposta" : "Fazer contraproposta"}</h2><p id="action-description" className="mt-1 text-xs text-[#78877d]">{active.buyer} • {active.product}</p></div><button aria-label="Fechar" onClick={() => setAction(null)}><X size={18}/></button></div>
+      <div className="space-y-4 p-5"><div className="rounded-xl bg-[#f7f8f3] p-4 text-sm"><p>Preço anunciado: <strong>{currency(active.originalPrice)}/{active.unit}</strong></p><p className="mt-2">Proposta recebida: <strong>{currency(active.proposedPrice)}/{active.unit}</strong></p><p className="mt-2">Quantidade: <strong>{active.quantity} {active.unit}</strong></p></div>
         {action === "accept" && <p className="rounded-xl bg-[#fff0d7] p-3 text-xs text-[#8a5c13]">Ao aceitar, a proposta será atualizada no banco e o pedido/frete serão criados pelo backend.</p>}
-        {action === "counter" && <><label className="block text-xs font-semibold">Novo preço por saca (R$) *<input type="number" min={active.proposedPrice} max={active.originalPrice} step="0.01" value={counter} onChange={(e) => {setCounter(e.target.value);setError("");}} placeholder="Ex.: 1270.00" className={`mt-2 ${input}`}/></label><p className="text-xs text-[#78877d]">Valor entre {currency(active.proposedPrice)} e {currency(active.originalPrice)}.</p><label className="block text-xs font-semibold">Mensagem ao comprador<textarea rows={3} value={message} onChange={(e) => setMessage(e.target.value)} className={`mt-2 ${input}`}/></label><p className="flex items-center gap-2 text-xs text-[#78877d]"><Clock3 size={14}/> A contraproposta será registrada no histórico da negociação.</p></>}
+        {action === "counter" && <><label className="block text-xs font-semibold">Novo preço por {active.unit} (R$) *<input type="number" min={Math.min(active.proposedPrice, active.originalPrice)} max={Math.max(active.proposedPrice, active.originalPrice)} step="0.01" value={counter} onChange={(e) => {setCounter(e.target.value);setError("");}} placeholder="Ex.: 1270.00" className={`mt-2 ${input}`}/></label><p className="text-xs text-[#78877d]">Nesta interface, a contraproposta deve ficar entre o menor e o maior dos preços anunciado e recebido, para negociar dentro desse intervalo: {currency(Math.min(active.proposedPrice, active.originalPrice))} a {currency(Math.max(active.proposedPrice, active.originalPrice))}.</p><label className="block text-xs font-semibold">Mensagem ao comprador<textarea rows={3} value={message} onChange={(e) => setMessage(e.target.value)} className={`mt-2 ${input}`}/></label><p className="flex items-center gap-2 text-xs text-[#78877d]"><Clock3 size={14}/> A contraproposta será registrada no histórico da negociação.</p></>}
         {action === "reject" && <><label className="block text-xs font-semibold">Motivo *<select value={reason} onChange={(e) => setReason(e.target.value)} className={`mt-2 ${input}`}><option>Preço abaixo do esperado</option><option>Condições de pagamento</option><option>Prazo de retirada</option><option>Outro motivo</option></select></label><label className="block text-xs font-semibold">Observação ao comprador<textarea rows={3} value={message} onChange={(e) => setMessage(e.target.value)} className={`mt-2 ${input}`}/></label></>}
         {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm text-red-600">{error}</p>}
-      </div><div className="flex justify-end gap-2 border-t border-[#e5e9e3] p-4"><button onClick={() => setAction(null)} className="rounded-xl border border-[#dfe5dc] px-4 py-3 text-sm font-bold">Cancelar</button><button onClick={applyAction} className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white ${action === "reject" ? "bg-[#bf4440]" : "bg-[#2d6922]"}`}>{action === "counter" ? <Send size={16}/> : <Check size={16}/>} {action === "accept" ? "Aceitar proposta" : action === "counter" ? "Enviar contraproposta" : "Confirmar recusa"}</button></div></div></div>}
+      </div><div className="flex justify-end gap-2 border-t border-[#e5e9e3] p-4"><button onClick={() => setAction(null)} className="rounded-xl border border-[#dfe5dc] px-4 py-3 text-sm font-bold">Cancelar</button><button onClick={applyAction} className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-white ${action === "reject" ? "bg-[#bf4440]" : "bg-[#2d6922]"}`}>{action === "counter" ? <Send size={16}/> : <Check size={16}/>} {action === "accept" ? "Aceitar proposta" : action === "counter" ? "Enviar contraproposta" : "Confirmar recusa"}</button></div></dialog>}
   </div>;
 }

@@ -32,7 +32,8 @@ function getOfferImage(category: string, imageUrl?: string | null) {
   return cafeImage;
 }
 
-function getStatusBadge(status: "Ativa" | "Em negociação" | "Encerrada") {
+function getStatusBadge(status: "Ativa" | "Pausada" | "Em negociação" | "Encerrada") {
+  if (status === "Pausada") return "bg-[#edf1e9] text-[#526650]";
   if (status === "Em negociação") return "bg-[#fff0d7] text-[#a6680a]";
   if (status === "Encerrada") return "bg-[#fde8e7] text-[#bf4440]";
   return "bg-[#e3f5e9] text-[#23804b]";
@@ -45,16 +46,33 @@ export default function ProducerPage() {
   const orders = useOrderStore(selectOrders);
   const fetchOrders = useOrderStore((state) => state.fetchOrders);
   const [proposals, setProposals] = useState<BackendProposal[]>([]);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [unreadNotifications, setUnreadNotifications] = useState<number | null>(null);
+  const [proposalState, setProposalState] = useState<"loading" | "ready" | "error">("loading");
+  const [notificationError, setNotificationError] = useState(false);
+  const offerState = useOfferStore((state) => state.myOffers);
+  const orderState = useOrderStore((state) => state.orders);
+  const [attempt, setAttempt] = useState(0);
+  const offersLoading = offerState.isLoading || (!offerState.lastFetchedAt && !offerState.error);
+  const ordersLoading = orderState.isLoading || (!orderState.lastFetchedAt && !orderState.error);
+  const display = (loading: boolean, error: unknown, value: string) => loading ? "Carregando…" : error ? "Indisponível" : value;
 
   useEffect(() => {
-    void fetchOffers();
-    void fetchOrders();
-    proposalService.list().then(setProposals).catch(() => setProposals([]));
-    notificationService.list()
-      .then((items) => setUnreadNotifications(items.filter((item) => !item.lida).length))
-      .catch(() => setUnreadNotifications(0));
-  }, [fetchOffers, fetchOrders, setProposals, setUnreadNotifications]);
+    let alive = true;
+    void fetchOffers(true);
+    void fetchOrders(true);
+    setProposalState("loading");
+    setUnreadNotifications(null);
+    setNotificationError(false);
+    void (async () => {
+      try { const data = await proposalService.list(); if (alive) { setProposals(data); setProposalState("ready"); } }
+      catch { if (alive) setProposalState("error"); }
+    })();
+    void (async () => {
+      try { const data = await notificationService.list(); if (alive) setUnreadNotifications(data.filter((item) => !item.lida).length); }
+      catch { if (alive) setNotificationError(true); }
+    })();
+    return () => { alive = false; };
+  }, [fetchOffers, fetchOrders, attempt]);
 
   const openProposals = proposals.filter((proposal) =>
     proposal.status === "PENDENTE" || proposal.status === "CONTRAPROPOSTA"
@@ -65,10 +83,11 @@ export default function ProducerPage() {
   );
   const getDashboardStatus = (offer: typeof offers[number]) => {
     if (offer.status === "ENCERRADA") return "Encerrada" as const;
-    if (receivedProposals(offer.id).length > 0) return "Em negociação" as const;
+    if (offer.status === "PAUSADA") return "Pausada" as const;
+    if (proposalState === "ready" && receivedProposals(offer.id).length > 0) return "Em negociação" as const;
     return "Ativa" as const;
   };
-  const activeOffers = offers.filter((offer) => getDashboardStatus(offer) === "Ativa").length;
+  const activeOffers = offers.filter((offer) => offer.status === "ATIVA").length;
   const negotiatedVolume = orders
     .filter((order) => order.status !== "ABERTO" && order.status !== "NEGOCIANDO")
     .reduce((total, order) => total + Number(order.preco_final) * Number(order.quantidade_final), 0);
@@ -82,7 +101,7 @@ export default function ProducerPage() {
         profileName={user?.name ?? "Produtor"}
         role="PRODUTOR"
         links={navigation}
-        notificationCount={unreadNotifications}
+        notificationCount={unreadNotifications ?? undefined}
         notificationsHref="/produtor/notificacoes"
       />
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
@@ -92,11 +111,16 @@ export default function ProducerPage() {
           <p className="mt-2 text-sm text-[#78877d]">Acompanhe seus lotes, negociações e pedidos em tempo real.</p>
         </section>
 
+        {(offerState.error || orderState.error || proposalState === "error" || notificationError) && <div role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">
+          {offerState.error && <p>Ofertas: {offerState.error}</p>}{orderState.error && <p>Pedidos: {orderState.error}</p>}{proposalState === "error" && <p>Não foi possível carregar as propostas.</p>}{notificationError && <p>Contador de notificações indisponível.</p>}
+          <button type="button" onClick={() => setAttempt((n) => n + 1)} className="mt-2 font-bold underline">Tentar novamente</button>
+        </div>}
+        {unreadNotifications === null && !notificationError && <p role="status" className="mb-3 text-xs text-[#708077]">Carregando notificações…</p>}
         <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {[
-            { title: "Ofertas ativas", value: String(activeOffers), detail: `${offers.length} no total`, icon: Package },
-            { title: "Negociações em andamento", value: String(openProposals.length), detail: `${proposals.filter((p) => p.status === "PENDENTE").length} aguardam você`, icon: Handshake },
-            { title: "Volume negociado", value: currency(negotiatedVolume), detail: `${orders.length} pedidos`, icon: Wallet },
+            { title: "Ofertas ativas", value: display(offersLoading, offerState.error, String(activeOffers)), detail: display(offersLoading, offerState.error, `${offers.length} no total`), icon: Package },
+            { title: "Negociações em andamento", value: display(proposalState === "loading", proposalState === "error", String(openProposals.length)), detail: display(proposalState === "loading", proposalState === "error", `${proposals.filter((p) => p.status === "PENDENTE").length} aguardam você`), icon: Handshake },
+            { title: "Valor financeiro negociado", value: display(ordersLoading, orderState.error, currency(negotiatedVolume)), detail: display(ordersLoading, orderState.error, `${orders.length} pedidos`), icon: Wallet },
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -118,8 +142,8 @@ export default function ProducerPage() {
               <h2 className="text-lg font-extrabold">Minhas ofertas</h2>
               <Link to="/produtor/ofertas" className="text-xs font-semibold text-[#2d6922]">Ver todas</Link>
             </div>
-            {recentOffers.length === 0 ? (
-              <p className="rounded-xl bg-[#f7f8f5] p-5 text-sm text-[#78877d]">Você ainda não publicou ofertas.</p>
+            {offersLoading ? <p role="status">Carregando ofertas…</p> : offerState.error ? <p>Ofertas indisponíveis.</p> : recentOffers.length === 0 ? (
+              <div className="rounded-xl bg-[#f7f8f5] p-5 text-sm text-[#78877d]">Você ainda não publicou ofertas. <Link to="/produtor/ofertas?nova=1" className="font-bold text-[#2d6922] underline">Criar oferta</Link></div>
             ) : (
               <div className="space-y-3">
                 {recentOffers.map((offer) => (
@@ -142,7 +166,7 @@ export default function ProducerPage() {
                       </div>
                       <p className="mt-1 text-xs text-[#78877d]">
                         {Number(offer.quantidade)} {offer.unidade} • {offer.categoria} • {offer.localizacao}
-                        {offerProposals.length > 0 && ` • ${offerProposals.length} ${offerProposals.length === 1 ? "proposta recebida" : "propostas recebidas"}`}
+                        {proposalState === "ready" && offerProposals.length > 0 && ` • ${offerProposals.length} ${offerProposals.length === 1 ? "proposta recebida" : "propostas recebidas"}`}
                       </p>
                     </div>
                     <div className="text-right">
@@ -158,11 +182,11 @@ export default function ProducerPage() {
           </div>
 
           <div className="rounded-2xl bg-[#1d4818] p-6 text-white shadow-sm">
-            <h2 className="text-xl font-extrabold">{openProposals.length} propostas em andamento</h2>
+            <h2 className="text-xl font-extrabold">{display(proposalState === "loading", proposalState === "error", `${openProposals.length} propostas em andamento`)}</h2>
             <p className="mt-3 text-sm leading-relaxed text-[#bdd2b9]">
-              {latestProposal ? `A mais recente é de ${latestProposal.comprador.nome} para ${latestProposal.oferta.produto}.` : "Nenhuma proposta pendente no momento."}
+              {proposalState !== "ready" ? "Resumo de propostas indisponível até concluir a consulta." : latestProposal ? `A mais recente é de ${latestProposal.comprador.nome} para ${latestProposal.oferta.produto}.` : "Nenhuma proposta pendente no momento."}
             </p>
-            {latestProposal && (
+            {proposalState === "ready" && latestProposal && (
               <div className="mt-5 rounded-xl border border-white/15 bg-white/10 p-4">
                 <p className="text-xs font-semibold text-[#d0f08a]">{latestProposal.comprador.nome}</p>
                 <p className="mt-2 text-2xl font-extrabold">{currency(Number(latestProposal.preco))}</p>
