@@ -252,7 +252,7 @@ export default function AvailableFreightsPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9f5] font-['Manrope'] text-[#142418]">
-      <ProfileNavbar profileName={user?.name || "Transportador"} role="TRANSPORTADOR" links={links} />
+      <ProfileNavbar profileName={user?.name || "Transportador"} role="TRANSPORTADOR" links={links} notificationsHref="/transportador/notificacoes" />
       <main className="mx-auto max-w-[1280px] px-5 pb-16 pt-8 md:px-12">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>

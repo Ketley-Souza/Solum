@@ -1,9 +1,10 @@
 import { Prisma, type Frete, type Pedido } from '../generated/prisma/client.js'
-import { PerfilUsuario, StatusOferta, StatusPedido } from '../generated/prisma/enums.js'
+import { PerfilUsuario, StatusOferta, StatusPedido, TipoReferencia } from '../generated/prisma/enums.js'
 import type { UsuarioAutenticado } from '../middlewares/autenticar.js'
 import { prisma } from '../lib/prisma.js'
 import { AppError, ConflictError, NotFoundError } from '../errors.js'
 import { exigirPerfil, exigirPositivo, gerarCodigo, type ValorDecimal } from './comum.js'
+import { notificarTransportadoresNovoFrete, notificarUsuarios } from './notificacao.service.js'
 
 type Tx = Prisma.TransactionClient
 
@@ -90,6 +91,13 @@ export async function fecharPedidoComFrete(
       peso_toneladas: converterParaToneladas(pedido.quantidade_final, oferta.unidade),
     },
   })
+  await notificarUsuarios(tx, [oferta.produtor_id], {
+    titulo: `Pedido ${pedido.codigo} fechado`,
+    mensagem: `Pedido de ${oferta.produto} fechado e frete emitido.`,
+    tipo_referencia: TipoReferencia.PEDIDO,
+    referencia_id: pedido.id,
+  })
+  await notificarTransportadoresNovoFrete(tx, frete)
   return { pedido, frete }
 }
 

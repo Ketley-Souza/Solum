@@ -22,6 +22,35 @@ export async function listarNotificacoes(ator: UsuarioAutenticado) {
   })
 }
 
+/** Cria uma notificação por destinatário. Chamar com `tx` para ser atômico com o evento de origem. */
+export async function notificarUsuarios(
+  db: Prisma.TransactionClient,
+  usuarioIds: string[],
+  notificacao: { titulo: string; mensagem: string; tipo_referencia: TipoReferencia; referencia_id: string },
+) {
+  const destinatarios = [...new Set(usuarioIds)]
+  if (destinatarios.length === 0) return
+  await db.notificacao.createMany({
+    data: destinatarios.map((usuario_id) => ({ usuario_id, ...notificacao })),
+  })
+}
+
+export async function notificarTransportadoresNovoFrete(
+  tx: Prisma.TransactionClient,
+  frete: { id: string; codigo: string; endereco_origem: string; endereco_destino: string },
+) {
+  const transportadores = await tx.usuario.findMany({
+    where: { perfil: PerfilUsuario.TRANSPORTADOR, status: StatusUsuario.ATIVO, excluido_em: null },
+    select: { id: true },
+  })
+  await notificarUsuarios(tx, transportadores.map(({ id }) => id), {
+    titulo: `Novo frete disponível ${frete.codigo}`,
+    mensagem: `De ${frete.endereco_origem} para ${frete.endereco_destino}.`,
+    tipo_referencia: TipoReferencia.FRETE,
+    referencia_id: frete.id,
+  })
+}
+
 export async function notificarNovaOferta(oferta: {
   id: string
   produto: string

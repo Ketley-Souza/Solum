@@ -8,7 +8,8 @@
     "build": "tsc",
     "db:studio": "prisma studio",
     "start": "node dist/server.js",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "cifrar-dados": "tsx prisma/cifrar-dados.ts"
   },
   "keywords": [],
   "author": "",

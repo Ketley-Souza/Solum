@@ -110,8 +110,12 @@ model Usuario {
   id            String        @id @default(uuid()) @db.Uuid
   nome          String        @db.VarChar(150)
   /// CPF ou CNPJ (somente dígitos) — RNF07: nunca expor publicamente
-  documento     String        @unique @db.VarChar(14)
-  whatsapp      String        @db.VarChar(20)
+  /// Cifrado em repouso (AES-256-GCM) pela camada de acesso (src/lib/prisma.ts)
+  documento     String
+  /// Índice cego (HMAC-SHA256) do documento: garante unicidade e busca sem expor o valor
+  documento_hash String       @unique @db.VarChar(64)
+  /// Cifrado em repouso (AES-256-GCM)
+  whatsapp      String
   email         String        @unique @db.VarChar(254)
   /// RNF01 — somente hash (argon2)
   senha_hash    String
@@ -229,7 +233,7 @@ model Pedido {
   comprador_id     String       @db.Uuid
   preco_final      Decimal      @db.Decimal(14, 2)
   quantidade_final Decimal      @db.Decimal(14, 3)
-  endereco_entrega String       @db.VarChar(300)
+  endereco_entrega String       @db.Text
   status           StatusPedido @default(ABERTO)
   criado_em        DateTime     @default(now()) @db.Timestamptz(3)
   atualizado_em    DateTime     @updatedAt @db.Timestamptz(3)
@@ -255,8 +259,8 @@ model Frete {
   pedido_id        String      @unique @db.Uuid
   transportador_id String?     @db.Uuid
   veiculo_id       String?     @db.Uuid
-  endereco_origem  String      @db.VarChar(300)
-  endereco_destino String      @db.VarChar(300)
+  endereco_origem  String      @db.Text
+  endereco_destino String      @db.Text
   peso_toneladas   Decimal     @db.Decimal(10, 3)
   /// Nulo até ser definido (origem do valor ainda não especificada)
   valor_frete      Decimal?    @db.Decimal(14, 2)

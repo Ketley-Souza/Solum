@@ -74,7 +74,7 @@ export default function CarrierHistoryPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9f5] font-['Manrope'] text-[#142418]">
-      <ProfileNavbar profileName={user?.name || "Transportador"} role="TRANSPORTADOR" links={links} />
+      <ProfileNavbar profileName={user?.name || "Transportador"} role="TRANSPORTADOR" links={links} notificationsHref="/transportador/notificacoes" />
       <main className="mx-auto max-w-[1280px] px-5 pb-16 pt-8 md:px-12">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div><p className="text-[10px] font-extrabold uppercase tracking-wide text-[#2e7839]">Área do transportador</p><h1 className="mt-1 font-['Bricolage_Grotesque'] text-[30px] font-extrabold tracking-tight md:text-[32px]">Histórico</h1><p className="mt-1 text-xs text-[#829084]">Consulte os fretes concluídos e entregas anteriores.</p></div>

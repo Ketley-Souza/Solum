@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { prisma } from '../src/lib/prisma.js'
 import { gerarHashSenha } from '../src/lib/senha.js'
+import { indiceCego } from '../src/lib/cripto.js'
 import {
   PerfilUsuario,
   StatusOferta,
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
     create: {
       nome: 'Administrador Solum',
       documento: '10000000000191',
+      documento_hash: indiceCego('10000000000191'),
       whatsapp: '11999990001',
       email: 'admin@solum.com.br',
       senha_hash: senhaHash,
@@ -39,6 +41,7 @@ async function main(): Promise<void> {
     create: {
       nome: 'Fazenda Boa Vista (Produtor)',
       documento: '20000000000192',
+      documento_hash: indiceCego('20000000000192'),
       whatsapp: '65999990002',
       email: 'produtor@solum.com.br',
       senha_hash: senhaHash,
@@ -52,6 +55,7 @@ async function main(): Promise<void> {
     create: {
       nome: 'Agroindústria Sul (Comprador)',
       documento: '30000000000193',
+      documento_hash: indiceCego('30000000000193'),
       whatsapp: '41999990003',
       email: 'comprador@solum.com.br',
       senha_hash: senhaHash,
@@ -65,6 +69,7 @@ async function main(): Promise<void> {
     create: {
       nome: 'TransGrãos Logística (Transportador)',
       documento: '40000000000194',
+      documento_hash: indiceCego('40000000000194'),
       whatsapp: '66999990004',
       email: 'transportador@solum.com.br',
       senha_hash: senhaHash,

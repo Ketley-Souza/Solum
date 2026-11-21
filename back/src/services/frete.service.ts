@@ -1,10 +1,11 @@
 import { Prisma, type Frete } from '../generated/prisma/client.js'
-import { PerfilUsuario, StatusFrete, StatusPedido } from '../generated/prisma/enums.js'
+import { PerfilUsuario, StatusFrete, StatusPedido, TipoReferencia } from '../generated/prisma/enums.js'
 import type { UsuarioAutenticado } from '../middlewares/autenticar.js'
 import { prisma } from '../lib/prisma.js'
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from '../errors.js'
 import { exigirPerfil } from './comum.js'
 import { transicionarPedido } from './pedido.service.js'
+import { notificarUsuarios } from './notificacao.service.js'
 
 type Tx = Prisma.TransactionClient
 
@@ -51,7 +52,23 @@ export async function aceitarFrete(ator: UsuarioAutenticado, freteId: string, ve
     })
     if (count === 0) throw new ConflictError('Frete indisponível: já aceito por outro transportador')
 
-    return tx.frete.findUniqueOrThrow({ where: { id: freteId } })
+    const aceito = await tx.frete.findUniqueOrThrow({ where: { id: freteId } })
+    await notificarAndamentoFrete(tx, aceito, 'Frete aceito por transportador')
+    return aceito
+  })
+}
+
+/** Avisa comprador e produtor do pedido sobre o andamento do frete. */
+async function notificarAndamentoFrete(tx: Tx, frete: Frete, titulo: string): Promise<void> {
+  const pedido = await tx.pedido.findUniqueOrThrow({
+    where: { id: frete.pedido_id },
+    include: { oferta: { select: { produtor_id: true } } },
+  })
+  await notificarUsuarios(tx, [pedido.comprador_id, pedido.oferta.produtor_id], {
+    titulo,
+    mensagem: `Pedido ${pedido.codigo} · frete ${frete.codigo}.`,
+    tipo_referencia: TipoReferencia.PEDIDO,
+    referencia_id: pedido.id,
   })
 }
 
@@ -62,6 +79,7 @@ async function avancarFrete(
   para: StatusFrete,
   pedidoDe: StatusPedido,
   pedidoPara: StatusPedido,
+  titulo: string,
 ): Promise<Frete> {
   exigirPerfil(ator, PerfilUsuario.TRANSPORTADOR)
   exigirTransicaoFrete(de, para)
@@ -75,16 +93,17 @@ async function avancarFrete(
 
     const frete = await tx.frete.findUniqueOrThrow({ where: { id: freteId } })
     await transicionarPedido(tx, frete.pedido_id, pedidoDe, pedidoPara)
+    await notificarAndamentoFrete(tx, frete, titulo)
     return frete
   })
 }
 
 export function iniciarTransporte(ator: UsuarioAutenticado, freteId: string): Promise<Frete> {
-  return avancarFrete(ator, freteId, StatusFrete.ACEITO, StatusFrete.EM_ROTA, StatusPedido.FECHADO, StatusPedido.EM_TRANSPORTE)
+  return avancarFrete(ator, freteId, StatusFrete.ACEITO, StatusFrete.EM_ROTA, StatusPedido.FECHADO, StatusPedido.EM_TRANSPORTE, 'Pedido em transporte')
 }
 
 export function confirmarEntrega(ator: UsuarioAutenticado, freteId: string): Promise<Frete> {
-  return avancarFrete(ator, freteId, StatusFrete.EM_ROTA, StatusFrete.ENTREGUE, StatusPedido.EM_TRANSPORTE, StatusPedido.ENTREGUE)
+  return avancarFrete(ator, freteId, StatusFrete.EM_ROTA, StatusFrete.ENTREGUE, StatusPedido.EM_TRANSPORTE, StatusPedido.ENTREGUE, 'Pedido entregue')
 }
 
 export async function listarFretes(

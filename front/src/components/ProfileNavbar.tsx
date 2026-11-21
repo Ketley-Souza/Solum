@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { notificationService } from '../services/notificationService'
 import { useAuthStore } from '../stores/authStore'
 
 type ProfileNavLink = { label: string; href: string }
@@ -21,7 +23,19 @@ type ProfileNavbarProps = {
   notificationsHref?: string
 }
 
-export default function ProfileNavbar({ profileName: fallbackName, role, links, notificationCount = 0, notificationsHref }: ProfileNavbarProps) {
+export default function ProfileNavbar({ profileName: fallbackName, role, links, notificationCount: countProp, notificationsHref }: ProfileNavbarProps) {
+  // Páginas do transportador não carregam notificações; o navbar busca o contador sozinho.
+  const [fetchedCount, setFetchedCount] = useState(0)
+  const shouldFetchCount = role === 'TRANSPORTADOR' && countProp === undefined
+  useEffect(() => {
+    if (!shouldFetchCount) return
+    let active = true
+    notificationService.list()
+      .then((items) => { if (active) setFetchedCount(items.filter((item) => !item.lida).length) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [shouldFetchCount])
+  const notificationCount = countProp ?? fetchedCount
   // Nome real do usuário logado; a prop só serve de fallback.
   const profileName = useAuthStore((state) => state.user?.name) ?? fallbackName
   const navIcons: LucideIcon[] = [LayoutDashboard, Store, Handshake, PackageCheck]

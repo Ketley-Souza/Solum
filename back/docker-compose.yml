@@ -10,5 +10,36 @@ services:
       - "5433:5432"
     volumes:
       - solum_pgdata:/var/lib/postgresql
+      - ./certs:/certs:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    # Criptografia em trânsito: TLS obrigatório (pg_hba rejeita conexões sem SSL).
+    # A chave é copiada porque o Postgres exige dono postgres e permissão 0600.
+    command:
+      - sh
+      - -c
+      - >-
+        cp /certs/server.key /tmp/server.key &&
+        chown postgres:postgres /tmp/server.key &&
+        chmod 600 /tmp/server.key &&
+        exec docker-entrypoint.sh postgres
+        -c ssl=on
+        -c ssl_cert_file=/certs/server.crt
+        -c ssl_key_file=/tmp/server.key
+        -c ssl_min_protocol_version=TLSv1.2
+        -c hba_file=/etc/postgresql/pg_hba.conf
+
+  # HTTPS de ponta a ponta no navegador: https://localhost -> front (Vite), que repassa /api para a API.
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - solum_caddy_data:/data
+
 volumes:
   solum_pgdata:
+  solum_caddy_data:

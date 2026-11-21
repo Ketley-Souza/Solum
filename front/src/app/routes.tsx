@@ -21,6 +21,7 @@ import CarrierPage from "../pages/carrier";
 import AvailableFreightsPage from "../pages/carrier/available-freights";
 import MyFreightsPage from "../pages/carrier/my-freights";
 import CarrierHistoryPage from "../pages/carrier/history";
+import CarrierNotificationsPage from "../pages/carrier/notifications";
 import ProfilePage from "../pages/ProfilePage";
 import LegalPage from "../pages/legal/LegalPage";
 import { authService } from "../services/authService";
@@ -157,6 +158,7 @@ const router = createBrowserRouter([
           { path: "fretes-disponiveis", element: <AvailableFreightsPage /> },
           { path: "meus-fretes", element: <MyFreightsPage /> },
           { path: "historico", element: <CarrierHistoryPage /> },
+          { path: "notificacoes", element: <CarrierNotificationsPage /> },
           { path: "perfil", element: <ProfilePage profile="transportador" /> },
         ],
       },

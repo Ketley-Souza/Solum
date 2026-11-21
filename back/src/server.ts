@@ -5,7 +5,7 @@ import { apiRouter } from './routes/index.js'
 import { tratarErros } from './middlewares/tratar-erros.js'
 
 const app = express()
-const corsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
+const corsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174,https://localhost')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean)

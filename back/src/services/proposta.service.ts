@@ -5,12 +5,14 @@ import {
   StatusOferta,
   StatusPedido,
   StatusProposta,
+  TipoReferencia,
 } from '../generated/prisma/enums.js'
 import type { UsuarioAutenticado } from '../middlewares/autenticar.js'
 import { prisma } from '../lib/prisma.js'
 import { AppError, ConflictError, NotFoundError } from '../errors.js'
 import { exigirPerfil, exigirPositivo, gerarCodigo, type ValorDecimal } from './comum.js'
 import { fecharPedidoComFrete } from './pedido.service.js'
+import { notificarUsuarios } from './notificacao.service.js'
 
 type Tx = Prisma.TransactionClient
 
@@ -68,6 +70,12 @@ export async function criarProposta(
         status: StatusPedido.NEGOCIANDO,
       },
     })
+    await notificarUsuarios(tx, [oferta.produtor_id], {
+      titulo: `Nova proposta para ${oferta.produto}`,
+      mensagem: `Proposta de ${quantidade.toString()} ${oferta.unidade} a R$ ${preco.toFixed(2)}/${oferta.unidade}.`,
+      tipo_referencia: TipoReferencia.PROPOSTA,
+      referencia_id: proposta.id,
+    })
     return { proposta, pedido }
   })
 }
@@ -90,6 +98,16 @@ async function expirarSeVencida(contraPropostaId: string): Promise<boolean> {
       data: { status: StatusProposta.RECUSADA },
     })
     await arquivarPedidoNegociado(tx, contra.proposta_id)
+    const proposta = await tx.proposta.findUniqueOrThrow({
+      where: { id: contra.proposta_id },
+      include: { oferta: true },
+    })
+    await notificarUsuarios(tx, [proposta.comprador_id, proposta.oferta.produtor_id], {
+      titulo: 'Contraproposta expirada',
+      mensagem: `A contraproposta de ${proposta.oferta.produto} expirou sem resposta.`,
+      tipo_referencia: TipoReferencia.CONTRA_PROPOSTA,
+      referencia_id: contra.id,
+    })
     return true
   })
 }
@@ -129,6 +147,16 @@ async function resolverContraProposta(
       })
     } else {
       await arquivarPedidoNegociado(tx, contra.proposta_id)
+      const proposta = await tx.proposta.findUniqueOrThrow({
+        where: { id: contra.proposta_id },
+        include: { oferta: true },
+      })
+      await notificarUsuarios(tx, [proposta.oferta.produtor_id], {
+        titulo: 'Contraproposta recusada',
+        mensagem: `O comprador recusou a contraproposta de ${proposta.oferta.produto}.`,
+        tipo_referencia: TipoReferencia.CONTRA_PROPOSTA,
+        referencia_id: contra.id,
+      })
     }
     return tx.contraProposta.findUniqueOrThrow({ where: { id: contra.id } })
   })
@@ -170,7 +198,14 @@ export async function aceitarProposta(
     const proposta = await propostaDoProdutor(tx, ator, propostaId)
     await marcarProposta(tx, proposta.id, StatusProposta.ACEITA)
     const pedido = await pedidoDaProposta(tx, proposta.id)
-    return fecharPedidoComFrete(tx, pedido.id, StatusPedido.NEGOCIANDO)
+    const resultado = await fecharPedidoComFrete(tx, pedido.id, StatusPedido.NEGOCIANDO)
+    await notificarUsuarios(tx, [proposta.comprador_id], {
+      titulo: 'Proposta aceita',
+      mensagem: `Sua proposta para ${proposta.oferta.produto} foi aceita. Pedido ${resultado.pedido.codigo} fechado.`,
+      tipo_referencia: TipoReferencia.PROPOSTA,
+      referencia_id: proposta.id,
+    })
+    return resultado
   })
 }
 
@@ -179,6 +214,12 @@ export async function recusarProposta(ator: UsuarioAutenticado, propostaId: stri
     const proposta = await propostaDoProdutor(tx, ator, propostaId)
     await marcarProposta(tx, proposta.id, StatusProposta.RECUSADA)
     await arquivarPedidoNegociado(tx, proposta.id)
+    await notificarUsuarios(tx, [proposta.comprador_id], {
+      titulo: 'Proposta recusada',
+      mensagem: `Sua proposta para ${proposta.oferta.produto} foi recusada.`,
+      tipo_referencia: TipoReferencia.PROPOSTA,
+      referencia_id: proposta.id,
+    })
   })
 }
 
@@ -203,7 +244,7 @@ export async function contrapropor(
       throw new AppError('Quantidade excede a quantidade ofertada', 422)
     }
     await marcarProposta(tx, proposta.id, StatusProposta.CONTRAPROPOSTA)
-    return tx.contraProposta.create({
+    const contra = await tx.contraProposta.create({
       data: {
         proposta_id: proposta.id,
         preco_contraproposta: preco,
@@ -211,6 +252,13 @@ export async function contrapropor(
         mensagem: dados.mensagem ?? null,
       },
     })
+    await notificarUsuarios(tx, [proposta.comprador_id], {
+      titulo: 'Nova contraproposta',
+      mensagem: `O produtor contrapropôs ${proposta.oferta.produto}: R$ ${preco.toFixed(2)}/${proposta.oferta.unidade}.`,
+      tipo_referencia: TipoReferencia.CONTRA_PROPOSTA,
+      referencia_id: contra.id,
+    })
+    return contra
   })
 }
 

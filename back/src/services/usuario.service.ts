@@ -2,6 +2,7 @@ import { Prisma } from '../generated/prisma/client.js'
 import { PerfilUsuario, StatusUsuario } from '../generated/prisma/enums.js'
 import type { UsuarioAutenticado } from '../middlewares/autenticar.js'
 import { prisma } from '../lib/prisma.js'
+import { indiceCego } from '../lib/cripto.js'
 import { gerarHashSenha, verificarSenha } from '../lib/senha.js'
 import { gerarToken } from '../lib/token.js'
 import { AppError, ForbiddenError, NotFoundError, UnauthorizedError } from '../errors.js'
@@ -44,6 +45,7 @@ export async function cadastrarUsuario(dados: DadosCadastroUsuario): Promise<Usu
     data: {
       nome: dados.nome,
       documento: dados.documento,
+      documento_hash: indiceCego(dados.documento),
       whatsapp: dados.whatsapp,
       email: dados.email.toLowerCase(),
       senha_hash,

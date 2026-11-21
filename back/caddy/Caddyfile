@@ -1,0 +1,5 @@
+localhost {
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy host.docker.internal:5173
+}

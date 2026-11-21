@@ -86,7 +86,7 @@ export default function MyFreightsPage() {
 
   return (
     <div className="min-h-screen bg-[#f8f9f5] font-['Manrope'] text-[#142418]">
-      <ProfileNavbar profileName={user?.name || "Transportador"} role="TRANSPORTADOR" links={links} />
+      <ProfileNavbar profileName={user?.name || "Transportador"} role="TRANSPORTADOR" links={links} notificationsHref="/transportador/notificacoes" />
       <main className="mx-auto max-w-[930px] px-5 pb-16 pt-10 md:px-9">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div><p className="text-[10px] font-extrabold uppercase tracking-wide text-[#317b3f]">Conta transportador · {active.length} fretes ativos</p><h1 className="mt-1 font-['Bricolage_Grotesque'] text-[30px] font-extrabold">Meus fretes</h1><p className="mt-1 text-xs text-[#7b8b78]">Acompanhe e atualize o status das suas entregas.</p></div>
