@@ -34,7 +34,6 @@ export default function BuyerNegotiationsPage() {
         notificationsHref="/comprador/notificacoes"
         links={[
           { label: 'Marketplace', href: '/comprador' },
-          { label: 'Negociações', href: '/comprador/negociacoes' },
           { label: 'Meus pedidos', href: '/comprador/pedidos' },
         ]}
       />

@@ -115,7 +115,6 @@ export default function ProducerNotificationsPage() {
     <div className="min-h-screen bg-[#f7f8f3] font-['Manrope'] text-[#102217]">
       <ProfileNavbar profileName={profileName} role="PRODUTOR" links={navigation} notificationCount={unreadCount} notificationsHref="/produtor/notificacoes" />
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
-        <p className="mb-1 text-xs font-bold uppercase text-[#2d6922]">Área do produtor • Central de atualizações</p>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight">Notificações</h1>

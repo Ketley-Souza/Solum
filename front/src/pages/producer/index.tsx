@@ -106,7 +106,6 @@ export default function ProducerPage() {
       />
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
         <section className="mb-7">
-          <p className="mb-2 text-xs font-bold uppercase text-[#2d6922]">Área do produtor</p>
           <h1 className="text-3xl font-extrabold tracking-tight">Olá, {firstName}!</h1>
           <p className="mt-2 text-sm text-[#78877d]">Acompanhe seus lotes, negociações e pedidos em tempo real.</p>
         </section>

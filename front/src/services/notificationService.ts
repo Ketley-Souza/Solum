@@ -13,20 +13,26 @@ export interface BackendNotification {
   criado_em: string;
 }
 
-function authHeaders(): Record<string, string> {
+function authHeaders(): Record<string, string> | null {
   const token = useAuthStore.getState().token;
-  if (!token) throw new Error("Entre com uma conta para carregar as notificações.");
+  if (!token) return null;
   return { Authorization: `Bearer ${token}` };
 }
 
 export const notificationService = {
   list(): Promise<BackendNotification[]> {
-    return requestJson<BackendNotification[]>("/notificacoes", { headers: authHeaders() });
+    const headers = authHeaders();
+    if (!headers) return Promise.resolve([]);
+    return requestJson<BackendNotification[]>("/notificacoes", { headers });
   },
   markRead(id: string): Promise<void> {
-    return requestJson<void>(`/notificacoes/${encodeURIComponent(id)}/lida`, { method: "PATCH", headers: authHeaders() });
+    const headers = authHeaders();
+    if (!headers) return Promise.reject(new Error("Entre com uma conta para marcar notificações."));
+    return requestJson<void>(`/notificacoes/${encodeURIComponent(id)}/lida`, { method: "PATCH", headers });
   },
   markAllRead(): Promise<void> {
-    return requestJson<void>("/notificacoes/todas/lidas", { method: "PATCH", headers: authHeaders() });
+    const headers = authHeaders();
+    if (!headers) return Promise.reject(new Error("Entre com uma conta para marcar notificações."));
+    return requestJson<void>("/notificacoes/todas/lidas", { method: "PATCH", headers });
   },
 };

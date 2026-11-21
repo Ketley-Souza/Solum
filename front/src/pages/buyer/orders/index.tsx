@@ -251,7 +251,6 @@ export default function BuyerOrdersPage() {
         notificationsHref="/comprador/notificacoes"
         links={[
           { label: 'Marketplace', href: '/comprador' },
-          { label: 'Negociações', href: '/comprador/negociacoes' },
           { label: 'Meus pedidos', href: '/comprador/pedidos' },
         ]}
       />
@@ -259,9 +258,6 @@ export default function BuyerOrdersPage() {
       <main className="mx-auto max-w-[1440px] px-5 pb-16 pt-9 md:px-12">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-wide text-[#287a48]">
-              Conta compradora · Gestão de pedidos
-            </p>
 
             <h1 className="mt-1 font-['Bricolage_Grotesque'] text-3xl font-extrabold">
               Meus pedidos

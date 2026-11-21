@@ -433,7 +433,7 @@ export default function BuyerPage() {
 
           <div className="relative">
             <p className="text-[11px] font-extrabold uppercase tracking-wide text-[#287a48]">
-              Conta compradora • Marketplace
+              Marketplace
             </p>
 
             <h1 className="mt-2 font-['Bricolage_Grotesque'] text-3xl font-extrabold leading-tight md:text-4xl">

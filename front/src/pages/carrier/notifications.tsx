@@ -118,7 +118,7 @@ export default function CarrierNotificationsPage() {
         <p className="mb-1 text-xs font-bold uppercase text-[#2d6922]">Conta transportador • Central de atualizações</p>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight">Notificações</h1>
+            <h1 className="mt-1 font-sans text-[24px] text-[#355437] font-bold tracking-tight md:text-[28px]">Notificações</h1>
             <p className="mt-2 text-sm text-[#78877d]">Acompanhe fretes e entregas que precisam da sua atenção.</p>
           </div>
           <button type="button" disabled={busy || loading || unreadCount === 0} onClick={markAllRead} className="flex items-center gap-2 rounded-xl border border-[#dce4d9] bg-white px-4 py-3 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 hover:bg-[#edf5e8]">

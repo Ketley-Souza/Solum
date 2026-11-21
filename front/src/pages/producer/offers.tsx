@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 
 import ProfileNavbar from "../../components/ProfileNavbar";
-import { notificationService } from "../../services/notificationService";
 import { useAuthStore } from "../../stores/authStore";
 import CreateOfferModal, {
   type NewOffer,
@@ -126,16 +125,6 @@ function fromBackend(offer: BackendOffer, proposalCount: number): Offer {
 
 export default function ProducerOffersPage() {
   const profileName = useAuthStore((state) => state.user?.name ?? "Produtor");
-  const [notificationCount, setNotificationCount] = useState<number | undefined>(undefined);
-  const [notificationError, setNotificationError] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try { const items = await notificationService.list(); if (alive) setNotificationCount(items.filter((item) => !item.lida).length); }
-      catch { if (alive) setNotificationError(true); }
-    })();
-    return () => { alive = false; };
-  }, []);
   const [apiError, setApiError] = useState("");
   const [proposals, setProposals] = useState<BackendProposal[]>([]);
   const [proposalsError, setProposalsError] = useState("");
@@ -326,11 +315,9 @@ export default function ProducerOffersPage() {
         profileName={profileName}
         role="PRODUTOR"
         links={navigation}
-        notificationCount={notificationCount}
         notificationsHref="/produtor/notificacoes"
       />
 
-      {notificationError && <p role="status" className="mx-auto max-w-7xl px-5 pt-3 text-xs text-red-700">Contador de notificações indisponível.</p>}
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
         {(apiError || offersError || proposalsError) && (
           <div className="mb-5 space-y-2">

@@ -190,7 +190,6 @@ export default function ProducerNegotiationsPage() {
     {notificationError && <p role="status" className="mx-auto max-w-7xl px-5 pt-3 text-xs text-red-700">Contador de notificações indisponível.</p>}
       <main className="mx-auto max-w-7xl px-5 py-8 md:px-10">
       {!active ? <>
-        <p className="mb-1 text-xs font-bold uppercase text-[#2d6922]">Área do produtor</p>
         <h1 className="text-3xl font-extrabold tracking-tight">Negociações</h1>
         <p className="mt-2 text-sm text-[#78877d]">Analise propostas e acompanhe cada acordo até a conclusão.</p>
         <div className="my-6 flex flex-wrap items-center justify-between gap-3">

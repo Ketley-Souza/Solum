@@ -24,9 +24,10 @@ type ProfileNavbarProps = {
 }
 
 export default function ProfileNavbar({ profileName: fallbackName, role, links, notificationCount: countProp, notificationsHref }: ProfileNavbarProps) {
-  // Páginas do transportador não carregam notificações; o navbar busca o contador sozinho.
+  // Quando countProp não é informado, o navbar busca o contador automaticamente para qualquer perfil autenticado.
   const [fetchedCount, setFetchedCount] = useState(0)
-  const shouldFetchCount = role === 'TRANSPORTADOR' && countProp === undefined
+  const token = useAuthStore((state) => state.token)
+  const shouldFetchCount = countProp === undefined && Boolean(token)
   useEffect(() => {
     if (!shouldFetchCount) return
     let active = true
@@ -34,7 +35,7 @@ export default function ProfileNavbar({ profileName: fallbackName, role, links, 
       .then((items) => { if (active) setFetchedCount(items.filter((item) => !item.lida).length) })
       .catch(() => {})
     return () => { active = false }
-  }, [shouldFetchCount])
+  }, [shouldFetchCount, token])
   const notificationCount = countProp ?? fetchedCount
   // Nome real do usuário logado; a prop só serve de fallback.
   const profileName = useAuthStore((state) => state.user?.name) ?? fallbackName

@@ -4,7 +4,6 @@ import {
   MapPin, Package, Search, ShieldCheck, Truck,
 } from "lucide-react";
 import ProfileNavbar from "../../components/ProfileNavbar";
-import { notificationService } from "../../services/notificationService";
 import { useAuthStore } from "../../stores/authStore";
 import type { BackendOrder, OrderStatus } from "../../services/orderService";
 import { selectOrders, selectOrdersError, selectOrdersLoading, useOrderStore } from "../../stores/orderStore";
@@ -94,16 +93,6 @@ function stageIndex(stage: Stage) {
 }
 export default function ProducerOrdersPage() {
   const profileName = useAuthStore((state) => state.user?.name ?? "Produtor");
-  const [notificationCount, setNotificationCount] = useState<number | undefined>(undefined);
-  const [notificationError, setNotificationError] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try { const items = await notificationService.list(); if (alive) setNotificationCount(items.filter((item) => !item.lida).length); }
-      catch { if (alive) setNotificationError(true); }
-    })();
-    return () => { alive = false; };
-  }, []);
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState<"Todas" | "Em andamento" | "Concluídos">("Todas");
   const [search, setSearch] = useState("");
@@ -143,14 +132,11 @@ export default function ProducerOrdersPage() {
         profileName={profileName}
         role="PRODUTOR"
         links={links}
-        notificationCount={notificationCount}
         notificationsHref="/produtor/notificacoes"
       />
-      {notificationError && <p role="status" className="mx-auto max-w-7xl px-5 pt-3 text-xs text-red-700">Contador de notificações indisponível.</p>}
       <main className="mx-auto max-w-7xl px-5 py-7 md:px-10">
         {error && <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {loading && <p className="mb-4 text-sm text-[#78877d]">Carregando pedidos...</p>}
-        <p className="mb-1 text-xs font-bold uppercase text-[#2d6922]">Área do produtor</p>
         <h1 className="text-3xl font-extrabold tracking-tight">Pedidos e logística</h1>
         <p className="mt-2 text-sm text-[#78877d]">Acompanhe cada venda do fechamento à confirmação da entrega.</p>
 
