@@ -135,6 +135,35 @@ function fromBackend(offer: BackendOffer): Offer {
   };
 }
 
+/** Retorna true somente quando o período cadastrado ainda não terminou. */
+function isOfferPeriodValid(period: string): boolean {
+  const value = (period || "").trim();
+  if (!value) return false;
+
+  const parts = value.split(/\s+a\s+/i);
+  if (parts.length !== 2) return false;
+
+  function parseLocalDate(input: string): Date | null {
+    const match = input.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  const start = parseLocalDate(parts[0]);
+  const end = parseLocalDate(parts[1]);
+  if (!start || !end || end < start) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return end >= today;
+}
+
 /**
  * Verifica se o período informado pela oferta atende ao filtro.
  * Aceita períodos em texto, como "Até 15 dias", e datas.
@@ -256,8 +285,12 @@ export default function BuyerPage() {
   }, []);
 
   // Só utiliza ofertas recebidas do backend.
+  // Exibe somente ofertas ativas com período de disponibilidade válido.
+  // Ofertas futuras permanecem visíveis, mas a negociação só abre na data inicial.
   const remoteOffers = useMemo(
-    () => backendOffers.map(fromBackend),
+    () => backendOffers
+      .filter((offer) => offer.status === "ATIVA" && isOfferPeriodValid(offer.periodo))
+      .map(fromBackend),
     [backendOffers]
   );
 
