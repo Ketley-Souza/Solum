@@ -53,23 +53,43 @@ export async function aceitarFrete(ator: UsuarioAutenticado, freteId: string, ve
     if (count === 0) throw new ConflictError('Frete indisponível: já aceito por outro transportador')
 
     const aceito = await tx.frete.findUniqueOrThrow({ where: { id: freteId } })
-    await notificarAndamentoFrete(tx, aceito, 'Frete aceito por transportador')
+    const transportador = await tx.usuario.findUniqueOrThrow({
+      where: { id: ator.id },
+      select: { nome: true, whatsapp: true },
+    })
+    await notificarAndamentoFrete(
+      tx,
+      aceito,
+      'Frete aceito por transportador',
+      `Transportador: ${transportador.nome} · telefone ${transportador.whatsapp}.`,
+    )
     return aceito
   })
 }
 
-/** Avisa comprador e produtor do pedido sobre o andamento do frete. */
-async function notificarAndamentoFrete(tx: Tx, frete: Frete, titulo: string): Promise<void> {
+/**
+ * Avisa comprador e produtor do pedido sobre o andamento do frete.
+ * `complementoComprador` é anexado somente à mensagem do comprador.
+ */
+async function notificarAndamentoFrete(
+  tx: Tx,
+  frete: Frete,
+  titulo: string,
+  complementoComprador?: string,
+): Promise<void> {
   const pedido = await tx.pedido.findUniqueOrThrow({
     where: { id: frete.pedido_id },
     include: { oferta: { select: { produtor_id: true } } },
   })
-  await notificarUsuarios(tx, [pedido.comprador_id, pedido.oferta.produtor_id], {
-    titulo,
-    mensagem: `Pedido ${pedido.codigo} · frete ${frete.codigo}.`,
-    tipo_referencia: TipoReferencia.PEDIDO,
-    referencia_id: pedido.id,
-  })
+  const mensagem = `Pedido ${pedido.codigo} · frete ${frete.codigo}.`
+  const referencia = { tipo_referencia: TipoReferencia.PEDIDO, referencia_id: pedido.id }
+
+  if (!complementoComprador) {
+    await notificarUsuarios(tx, [pedido.comprador_id, pedido.oferta.produtor_id], { titulo, mensagem, ...referencia })
+    return
+  }
+  await notificarUsuarios(tx, [pedido.comprador_id], { titulo, mensagem: `${mensagem} ${complementoComprador}`, ...referencia })
+  await notificarUsuarios(tx, [pedido.oferta.produtor_id], { titulo, mensagem, ...referencia })
 }
 
 async function avancarFrete(
