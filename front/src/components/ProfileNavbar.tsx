@@ -48,14 +48,17 @@ export default function ProfileNavbar({ profileName: fallbackName, role, links, 
   const isNotificationsActive = notificationsPath === location.pathname.replace(/\/$/, '')
   const notificationClassName = `relative flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-white hover:text-[#194e16] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c1f23c] ${isNotificationsActive ? 'bg-white text-[#194e16] shadow-[0_4px_16px_rgba(16,34,23,.05)]' : 'text-[#415247]'}`
   const notificationContents = (
-    <span className="relative">
-      <Bell size={15} strokeWidth={2} aria-hidden="true" />
-      {notificationCount > 0 && (
-        <span className="absolute -right-2 -top-2 flex min-w-[16px] items-center justify-center rounded-full bg-[#c1f23c] px-1 text-[9px] font-extrabold leading-4 text-[#102217]">
-          {notificationCount > 99 ? '99+' : notificationCount}
-        </span>
-      )}
-    </span>
+    <>
+      <span className="relative">
+        <Bell size={15} strokeWidth={2} aria-hidden="true" />
+        {notificationCount > 0 && (
+          <span className="absolute -right-2 -top-2 flex min-w-[16px] items-center justify-center rounded-full bg-[#c1f23c] px-1 text-[9px] font-extrabold leading-4 text-[#102217]">
+            {notificationCount > 99 ? '99+' : notificationCount}
+          </span>
+        )}
+      </span>
+      <span>Notificações</span>
+    </>
   )
   const allLinks = notificationsHref
     ? [...links, { label: 'Notificações', href: notificationsHref }]

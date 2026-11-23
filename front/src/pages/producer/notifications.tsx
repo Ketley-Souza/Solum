@@ -125,7 +125,6 @@ export default function ProducerNotificationsPage() {
           </button>
         </div>
 
-        <p className="mb-4 text-xs text-[#708077]">A API permite marcar como lida; reverter a leitura ainda não está disponível.</p>
         <div className="grid items-start gap-4 lg:grid-cols-[245px_minmax(0,1fr)]">
           <aside className="space-y-3">
             <section className="rounded-2xl border border-[#dfe6dd] bg-white p-3 shadow-sm" aria-label="Categorias de notificações">

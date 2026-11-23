@@ -1,10 +1,17 @@
-
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
+  Barcode,
   CheckCircle2,
   Clock3,
+  Copy,
   ShoppingBag,
   TrendingUp,
   Truck,
@@ -16,10 +23,14 @@ import ProfileNavbar from '../../../components/ProfileNavbar'
 import soja from '../../../assets/offer-soja.jpg'
 
 import type { BackendOrder, OrderStatus } from '../../../services/orderService'
-import { notificationService } from '../../../services/notificationService'
-
-import { useAuthStore } from '../../../stores/authStore'
 import {
+  notificationService,
+  type BackendNotification,
+} from '../../../services/notificationService'
+
+import { useAuthStore, type AuthState } from '../../../stores/authStore'
+import {
+  type OrderState,
   selectOrders,
   selectOrdersError,
   selectOrdersLoading,
@@ -54,11 +65,24 @@ const STATUS_LABEL: Record<OrderStatus, Status> = {
   ENTREGUE: 'Concluído',
 }
 
+const STATUS_BADGE: Record<Status, string> = {
+  Concluído: 'bg-[#e2f5e7] text-[#287a48]',
+  Negociando: 'bg-[#fff0d8] text-[#ad6a15]',
+  Cancelado: 'bg-red-100 text-red-700',
+  'Aguardando transporte': 'bg-[#e8f5ce] text-[#287a48]',
+  'Em andamento': 'bg-[#e3f2f5] text-[#34788b]',
+  'Em separação': 'bg-[#e3f2f5] text-[#34788b]',
+}
+
 const brl = (value: number) =>
   value.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   })
+
+// Valores ilustrativos: o frete ainda não é calculado e o pagamento não está integrado.
+const FRETE_EXEMPLO = 850
+const BOLETO_EXEMPLO = '23793.38128 60000.000003 00000.000400 1 98760000085000'
 
 function toOrder(pedido: BackendOrder): Order {
   const backendStatus = String(pedido.status)
@@ -102,14 +126,16 @@ export default function BuyerOrdersPage() {
   const [notificationCount, setNotificationCount] = useState(0)
   const [notificationsLoading, setNotificationsLoading] = useState(true)
 
-  const user = useAuthStore((state) => state.user)
+  const user = useAuthStore((state: AuthState) => state.user)
 
-  const backendOrders = useOrderStore(selectOrders)
-  const loading = useOrderStore(selectOrdersLoading)
+  const backendOrders: BackendOrder[] = useOrderStore(selectOrders)
+  const loading: boolean = useOrderStore(selectOrdersLoading)
   const error = useOrderStore(selectOrdersError)
-  const fetchOrders = useOrderStore((state) => state.fetchOrders)
+  const fetchOrders = useOrderStore(
+    (state: OrderState) => state.fetchOrders,
+  )
 
-  const orders = useMemo(
+  const orders: Order[] = useMemo(
     () => backendOrders.map(toOrder),
     [backendOrders],
   )
@@ -130,7 +156,9 @@ export default function BuyerOrdersPage() {
 
         if (active) {
           setNotificationCount(
-            notifications.filter((notification) => !notification.lida).length,
+            notifications.filter(
+              (notification: BackendNotification) => !notification.lida,
+            ).length,
           )
         }
       } catch (err) {
@@ -155,29 +183,29 @@ export default function BuyerOrdersPage() {
 
   // Indicadores calculados com os pedidos reais.
   const inProgress = orders.filter(
-    (order) =>
+    (order: Order) =>
       order.status === 'Em andamento' ||
       order.status === 'Em separação' ||
       order.status === 'Aguardando transporte',
   ).length
 
   const negotiating = orders.filter(
-    (order) => order.status === 'Negociando',
+    (order: Order) => order.status === 'Negociando',
   ).length
 
   const done = orders.filter(
-    (order) => order.status === 'Concluído',
+    (order: Order) => order.status === 'Concluído',
   ).length
 
   const cancelled = orders.filter(
-    (order) => order.status === 'Cancelado',
+    (order: Order) => order.status === 'Cancelado',
   ).length
 
   // Valor financeiro total dos pedidos, não volume físico.
   const negotiatedValue = orders
-    .filter((order) => order.status !== 'Cancelado')
+    .filter((order: Order) => order.status !== 'Cancelado')
     .reduce(
-      (sum, order) =>
+      (sum: number, order: Order) =>
         sum +
         Number(order.backend.preco_final) *
           Number(order.backend.quantidade_final),
@@ -186,7 +214,7 @@ export default function BuyerOrdersPage() {
 
   // Filtragem dos pedidos.
   const visibleOrders = useMemo(() => {
-    return orders.filter((order) => {
+    return orders.filter((order: Order) => {
       if (filter === 'Todos') return true
 
       if (filter === 'Concluídos') {
@@ -251,6 +279,7 @@ export default function BuyerOrdersPage() {
         notificationsHref="/comprador/notificacoes"
         links={[
           { label: 'Marketplace', href: '/comprador' },
+          { label: 'Negociações', href: '/comprador/negociacoes' },
           { label: 'Meus pedidos', href: '/comprador/pedidos' },
         ]}
       />
@@ -258,6 +287,9 @@ export default function BuyerOrdersPage() {
       <main className="mx-auto max-w-[1440px] px-5 pb-16 pt-9 md:px-12">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-wide text-[#287a48]">
+              Conta compradora · Gestão de pedidos
+            </p>
 
             <h1 className="mt-1 font-['Bricolage_Grotesque'] text-3xl font-extrabold">
               Meus pedidos
@@ -342,7 +374,7 @@ export default function BuyerOrdersPage() {
 
           {/* Filtros */}
           <div className="mt-3 flex flex-wrap gap-2">
-            {filters.map((item) => {
+            {filters.map((item: Filter) => {
               const count =
                 item === 'Todos'
                   ? orders.length
@@ -381,7 +413,7 @@ export default function BuyerOrdersPage() {
                   Carregando seus pedidos...
                 </div>
 
-                {[1, 2, 3].map((item) => (
+                {[1, 2, 3].map((item: number) => (
                   <div
                     key={item}
                     className="h-14 animate-pulse rounded-lg bg-[#eef2e8]"
@@ -437,7 +469,7 @@ export default function BuyerOrdersPage() {
                   </thead>
 
                   <tbody>
-                    {visibleOrders.map((order) => (
+                    {visibleOrders.map((order: Order) => (
                       <tr
                         key={order.id}
                         className="border-t border-[#e9ede7] text-xs"
@@ -476,17 +508,7 @@ export default function BuyerOrdersPage() {
 
                         <td className="px-3 py-3">
                           <span
-                            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[9px] font-extrabold ${
-                              order.status === 'Concluído'
-                                ? 'bg-[#e2f5e7] text-[#287a48]'
-                                : order.status === 'Negociando'
-                                  ? 'bg-[#fff0d8] text-[#ad6a15]'
-                                  : order.status === 'Cancelado'
-                                    ? 'bg-red-100 text-red-700'
-                                    : order.status === 'Aguardando transporte'
-                                      ? 'bg-[#e8f5ce] text-[#287a48]'
-                                      : 'bg-[#e3f2f5] text-[#34788b]'
-                            }`}
+                            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[9px] font-extrabold ${STATUS_BADGE[order.status]}`}
                           >
                             {order.status.toUpperCase()}
                           </span>
@@ -549,6 +571,35 @@ export default function BuyerOrdersPage() {
   )
 }
 
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="font-['Bricolage_Grotesque'] text-[15px] font-extrabold text-[#102217]">
+      {children}
+    </h3>
+  )
+}
+
+function Field({
+  label,
+  children,
+  className = '',
+}: {
+  label: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={className}>
+      <span className="block text-[11px] font-semibold text-[#415247]">
+        {label}
+      </span>
+      <div className="mt-1.5 flex min-h-[42px] items-center rounded-xl border border-[#e0e6dd] bg-[#fafbf8] px-3.5 py-2 text-[13px] font-semibold text-[#102217]">
+        {children}
+      </div>
+    </div>
+  )
+}
+
 function OrderDetailsModal({
   order,
   onClose,
@@ -557,180 +608,300 @@ function OrderDetailsModal({
   onClose: () => void
 }) {
   const proposal = order.backend.proposta
+  const backendStatus = String(order.backend.status)
+
+  const [copied, setCopied] = useState(false)
+
+  // O pagamento só faz sentido depois que o pedido foi fechado.
+  const showPayment = order.status === 'Aguardando transporte'
+  const showNegotiation = order.status === 'Negociando' && Boolean(proposal)
+
+  const productValue =
+    Number(order.backend.preco_final) * Number(order.backend.quantidade_final)
+  const totalToPay = productValue + FRETE_EXEMPLO
+  const dueDate = new Date(
+    Date.now() + 3 * 24 * 60 * 60 * 1000,
+  ).toLocaleDateString('pt-BR')
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  function copyBoleto() {
+    void navigator.clipboard?.writeText(BOLETO_EXEMPLO)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const stages = [
     { label: 'Aberto', active: true },
     {
       label: 'Negociando',
       active: ['NEGOCIANDO', 'FECHADO', 'EM_TRANSPORTE', 'ENTREGUE'].includes(
-        String(order.backend.status),
+        backendStatus,
       ),
     },
     {
       label: 'Fechado',
-      active: ['FECHADO', 'EM_TRANSPORTE', 'ENTREGUE'].includes(
-        String(order.backend.status),
-      ),
+      active: ['FECHADO', 'EM_TRANSPORTE', 'ENTREGUE'].includes(backendStatus),
     },
     {
       label: 'Em transporte',
-      active: ['EM_TRANSPORTE', 'ENTREGUE'].includes(
-        String(order.backend.status),
-      ),
+      active: ['EM_TRANSPORTE', 'ENTREGUE'].includes(backendStatus),
     },
-    {
-      label: 'Entregue',
-      active: String(order.backend.status) === 'ENTREGUE',
-    },
+    { label: 'Entregue', active: backendStatus === 'ENTREGUE' },
   ]
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#102217]/50 p-4 backdrop-blur-[2px]"
       role="presentation"
       onClick={onClose}
     >
       <section
         role="dialog"
         aria-modal="true"
-        aria-label="Detalhes do pedido"
-        onClick={(event) => event.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+        aria-labelledby="order-modal-title"
+        onClick={(event: MouseEvent) => event.stopPropagation()}
+        className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl bg-white shadow-[0_24px_80px_rgba(16,34,23,0.28)]"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs text-[#708077]">{order.id}</p>
+        {/* Cabeçalho */}
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-[#eef1ea] px-7 pb-5 pt-6">
+          <div className="min-w-0">
+            <h2
+              id="order-modal-title"
+              className="font-['Bricolage_Grotesque'] text-2xl font-extrabold leading-tight text-[#102217]"
+            >
+              Detalhes do pedido
+            </h2>
 
-            <h2 className="mt-1 text-xl font-extrabold">{order.name}</h2>
+            <p className="mt-1 truncate text-xs text-[#708077]">
+              {order.id} · {order.name}
+            </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-lg bg-[#eef2e8] p-2"
+            className="grid size-9 shrink-0 place-items-center rounded-full bg-[#f0f4eb] text-[#415247] transition hover:bg-[#e1efce]"
           >
             <X size={16} />
           </button>
-        </div>
+        </header>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-          <p>
-            <span className="block text-[10px] uppercase text-[#708077]">
-              Fornecedor
-            </span>
-            <strong>{order.supplier}</strong>
-          </p>
+        {/* Conteúdo */}
+        <div className="flex-1 space-y-7 overflow-y-auto px-7 py-6">
+          {/* Resumo */}
+          <div className="space-y-3">
+            <SectionTitle>Resumo do pedido</SectionTitle>
 
-          <p>
-            <span className="block text-[10px] uppercase text-[#708077]">
-              Status
-            </span>
-            <strong>{order.status}</strong>
-          </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Produto">{order.name}</Field>
+              <Field label="Fornecedor">{order.supplier}</Field>
+              <Field label="Volume">{order.volume}</Field>
+              <Field label="Valor do produto">{order.total}</Field>
 
-          <p>
-            <span className="block text-[10px] uppercase text-[#708077]">
-              Volume
-            </span>
-            <strong>{order.volume}</strong>
-          </p>
+              <Field label="Status">
+                <span
+                  className={`whitespace-nowrap rounded-full px-3 py-1 text-[10px] font-extrabold ${STATUS_BADGE[order.status]}`}
+                >
+                  {order.status.toUpperCase()}
+                </span>
+              </Field>
+              <Field label="Última atualização">{order.updated}</Field>
 
-          <p>
-            <span className="block text-[10px] uppercase text-[#708077]">
-              Total
-            </span>
-            <strong>{order.total}</strong>
-          </p>
-
-          <p className="col-span-2">
-            <span className="block text-[10px] uppercase text-[#708077]">
-              Entrega
-            </span>
-            <strong>{order.backend.endereco_entrega}</strong>
-          </p>
-        </div>
-
-        {order.status === 'Cancelado' ? (
-          <div className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-700">
-            <strong>Pedido cancelado</strong>
-            <p className="mt-1 text-xs">
-              Este pedido está registrado como cancelado.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-6 rounded-xl bg-[#f7f8f3] p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#708077]">
-              Acompanhamento do pedido
-            </p>
-
-            <div className="mt-5 grid grid-cols-5 gap-1">
-              {stages.map((stage, index) => (
-                <div key={stage.label} className="relative text-center">
-                  <span
-                    className={`mx-auto grid size-6 place-items-center rounded-full text-[10px] font-bold ${
-                      stage.active
-                        ? 'bg-[#2d6922] text-white'
-                        : 'bg-[#e0e6dd] text-[#708077]'
-                    }`}
-                  >
-                    {index + 1}
-                  </span>
-
-                  <p
-                    className={`mt-2 text-[9px] ${
-                      stage.active
-                        ? 'font-bold text-[#102217]'
-                        : 'text-[#9aa79b]'
-                    }`}
-                  >
-                    {stage.label}
-                  </p>
-                </div>
-              ))}
+              <Field label="Endereço de entrega" className="col-span-2">
+                {order.backend.endereco_entrega}
+              </Field>
             </div>
           </div>
-        )}
 
-        {order.backend.frete && (
-          <div className="mt-5 rounded-xl bg-[#eef6e9] p-4 text-sm">
-            <strong>Logística</strong>
+          {/* Acompanhamento */}
+          <div className="space-y-3">
+            <SectionTitle>Acompanhamento</SectionTitle>
 
-            <p className="mt-2">
-              Frete {order.backend.frete.codigo} ·{' '}
-              {order.backend.frete.status}
-            </p>
+            {order.status === 'Cancelado' ? (
+              <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+                <strong>Pedido cancelado</strong>
+                <p className="mt-1 text-xs">
+                  Este pedido está registrado como cancelado.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-[#e0e6dd] bg-[#fafbf8] px-4 py-5">
+                <ol className="grid grid-cols-5">
+                  {stages.map((stage, index) => {
+                    const nextActive = stages[index + 1]?.active ?? false
 
-            <p className="mt-1 text-xs text-[#708077]">
-              Transportador:{' '}
-              {order.backend.frete.transportador?.nome ??
-                'Aguardando atribuição'}
-            </p>
+                    return (
+                      <li
+                        key={stage.label}
+                        className="relative text-center"
+                      >
+                        {index < stages.length - 1 && (
+                          <span
+                            aria-hidden="true"
+                            className={`absolute left-1/2 top-3 h-0.5 w-full ${
+                              nextActive ? 'bg-[#2d6922]' : 'bg-[#e0e6dd]'
+                            }`}
+                          />
+                        )}
+
+                        <span
+                          className={`relative mx-auto grid size-6 place-items-center rounded-full text-[10px] font-bold ring-4 ring-[#fafbf8] ${
+                            stage.active
+                              ? 'bg-[#2d6922] text-white'
+                              : 'bg-[#e0e6dd] text-[#708077]'
+                          }`}
+                        >
+                          {index + 1}
+                        </span>
+
+                        <p
+                          className={`mt-2 text-[10px] ${
+                            stage.active
+                              ? 'font-bold text-[#102217]'
+                              : 'text-[#9aa79b]'
+                          }`}
+                        >
+                          {stage.label}
+                        </p>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </div>
+            )}
           </div>
-        )}
 
-        {proposal && (
-          <div className="mt-5 rounded-xl border border-[#e0e6dd] p-4 text-sm">
-            <strong>Negociação</strong>
+          {/* Pagamento: só em pedidos fechados / aguardando transporte */}
+          {showPayment && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <SectionTitle>Pagamento</SectionTitle>
 
-            <p className="mt-2">
-              Sua proposta: {brl(Number(proposal.preco))} por unidade
-            </p>
+                <span className="rounded-full bg-[#fff0d8] px-3 py-1 text-[10px] font-extrabold text-[#ad6a15]">
+                  AGUARDANDO PAGAMENTO
+                </span>
+              </div>
 
-            <p className="mt-3 text-xs text-[#708077]">
-              Para responder ou fazer uma nova proposta, acesse a área de
-              negociações.
-            </p>
+              <div className="rounded-2xl border border-[#e0e6dd] p-4">
+                <dl className="space-y-2.5 text-xs">
+                  <div className="flex justify-between">
+                    <dt className="text-[#708077]">Valor do produto</dt>
+                    <dd className="font-semibold">{brl(productValue)}</dd>
+                  </div>
 
+                  <div className="flex justify-between">
+                    <dt className="text-[#708077]">Frete (estimado)</dt>
+                    <dd className="font-semibold">{brl(FRETE_EXEMPLO)}</dd>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-[#eef1ea] pt-3">
+                    <dt className="font-bold">Total a pagar</dt>
+                    <dd className="font-['Bricolage_Grotesque'] text-xl font-extrabold text-[#287a48]">
+                      {brl(totalToPay)}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="mt-4 rounded-xl bg-[#f4f7ef] p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-9 place-items-center rounded-xl bg-[#e9f5d1] text-[#377128]">
+                      <Barcode size={17} />
+                    </span>
+
+                    <div>
+                      <strong className="block text-xs">Boleto bancário</strong>
+                      <small className="text-[11px] text-[#708077]">
+                        Vencimento em {dueDate}
+                      </small>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 break-all rounded-lg border border-dashed border-[#c9d3c4] bg-white px-3 py-2 font-mono text-[11px] text-[#415247]">
+                    {BOLETO_EXEMPLO}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={copyBoleto}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#2d6922] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#24552e]"
+                  >
+                    {copied ? <CheckCircle2 size={13} /> : <Copy size={13} />}
+                    {copied ? 'Código copiado!' : 'Copiar código do boleto'}
+                  </button>
+                </div>
+
+                <p className="mt-3 text-[10px] text-[#9aa79b]">
+                  Exemplo ilustrativo: valor do frete e código do boleto são
+                  fictícios.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Logística */}
+          {order.backend.frete && (
+            <div className="space-y-3">
+              <SectionTitle>Logística</SectionTitle>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Frete">
+                  {order.backend.frete.codigo} · {order.backend.frete.status}
+                </Field>
+
+                <Field label="Transportador">
+                  {order.backend.frete.transportador?.nome ??
+                    'Aguardando atribuição'}
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {/* Negociação: só em pedidos ainda negociando */}
+          {showNegotiation && proposal && (
+            <div className="space-y-3">
+              <SectionTitle>Negociação</SectionTitle>
+
+              <Field label="Sua proposta">
+                {brl(Number(proposal.preco))} por unidade
+              </Field>
+
+              <p className="text-xs text-[#708077]">
+                Para responder ou fazer uma nova proposta, acesse a área de
+                negociações.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Rodapé */}
+        <footer className="flex shrink-0 items-center justify-end gap-3 border-t border-[#eef1ea] bg-white px-7 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-[#e0e6dd] bg-white px-5 py-2.5 text-xs font-bold text-[#415247] shadow-sm transition hover:bg-[#f4f7ef]"
+          >
+            Fechar
+          </button>
+
+          {showNegotiation && (
             <Link
               to="/comprador/negociacoes"
               onClick={onClose}
-              className="mt-4 inline-flex rounded-lg bg-[#2d6922] px-4 py-2 text-xs font-bold text-white"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#2d6922] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#24552e]"
             >
               Ir para negociações
             </Link>
-          </div>
-        )}
+          )}
+        </footer>
       </section>
     </div>
   )
